@@ -1,0 +1,128 @@
+---
+title: "Empirical data analysis for NEE revision"
+author: "Shai Pilosof"
+date: "April 16, 2020"
+output: github_document
+---
+
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/Shai/GitHub/CRISPR_networks/")
+knitr:::read_chunk('/Users/Shai/GitHub/CRISPR_networks/empirical_data_analysis_revision.R')
+```
+
+```{r LOAD PACKAGES, include=FALSE, echo=FALSE}
+library(tidyverse)
+library(magrittr)
+library(sqldf)
+library(cowplot)
+library(igraph)
+library(bipartite)
+library(infomapecology)
+```
+
+```{r Load functions, echo=FALSE}
+<<load_functions>>
+```
+
+```{r connect to data base}
+db <- dbConnect(SQLite(), dbname = '/Users/Shai/GitHub/CRISPR_networks/CRISPR_database_V2.sqlite')
+```
+
+# Analysis
+
+We analyze the modular structure of host-spacer networks and the weighted-nested structure of immunity networks in three data sets: Yellowstone, Pseudomonas with virus cluster 3 and Russia 2010.
+
+```{r Load analysis, echo=FALSE, include=FALSE, eval=TRUE}
+<<analysis>>
+```
+
+## Host-spacr networks
+In host spacer networks we test for significance by shuffling the host-spacer network with an equiprobable algorithm. All the networks are significantly modular.
+
+```{r plots host-spacer}
+plot_grid(Yellowstone$p1, Yellowstone$p2,
+          Pseudomonas$p1, Pseudomonas$p2,
+          Russia2010$p1, Russia2010$p2,
+          ncol=2, nrow=3, align = 'vh', labels = letters[1:6], label_size = 16, scale = 0.95)
+```
+
+## Host-spacr networks
+In immunity networks we test for significance by shuffling the values of interactions (model `r00_samp`). These are all significantly modular.
+
+```{r plots immunity}
+plot_grid(Yellowstone$p4, NULL,
+          Pseudomonas$p4, Pseudomonas$p3,
+          Russia2010$p4, Russia2010$p3,
+          ncol=2, nrow=3, align = 'vh', labels = c('a','',letters[2:5]), label_size = 16, scale = 0.95)
+```
+
+# Phylogenetic analysis
+We look for phylogenetic signal in the host-spacer network of the Russia 2010 data set. The tree:
+
+```{r load_data_phylogenetic_analysis, echo=FALSE, include=FALSE, eval=TRUE}
+<<load_data_phylogenetic_analysis>>
+```
+
+```{r plot tree}
+plot(tree)
+```
+
+But not all the strains appear in the tree and in the network. 
+
+```{r strains_tree_network, echo=TRUE, include=TRUE, eval=TRUE}
+<<strains_tree_network>>
+```
+
+There are only `r length(overlapping)` overlapping strains out of `r length(nodes_in_modules)` in the network.
+
+## Phylogenetic distance within moduels
+
+First we calculate the mean phylogenetic distance between hosts within modules, and the mean of these distances. Note that not all modules are represented. This is because some of the modules have a single strain (distance requires minimum 2), and because not all the strains in the original network are included due to low overlap with strains in the tree.
+
+```{r PD_within_modules, echo=FALSE, include=FALSE, eval=TRUE}
+<<PD_within_modules>>
+```
+
+```{r echo=TRUE, include=TRUE}
+# Number of strains in a module
+M_obs %>% group_by(m) %>% count()
+
+# PD
+print(D_obs) # mean PD within modules
+print(D_obs_mean) # mean of means
+```
+
+## Significane of phylogenetic distance
+
+
+### Across modules using mean of PD means
+```{r permute_modules, echo=TRUE, include=FALSE, eval=TRUE}
+<<permute_modules>>
+```
+
+Now shuffle to create permuted modules of the same size and recalculate the mean PD within modules. The shuffling permutes the ID of the strains. The null hypothesis is that the permuted distance is smaller than the observed for each module (i.e., no signal). If we **reject** this hypothesis then there is phylogenetic signal because the observed PD beteween hosts within each module would be smaller than expected by chance (closely related hosts share a module). We see that if we consider the mean of mean PD across modules then we indeed reject this hypothesis, so there is a phylogenetic signal.
+
+```{r test_significance_PD_across_modules, echo=TRUE, include=TRUE, eval=TRUE}
+<<test_significance_PD_across_modules>>
+```
+
+### Within modules using mean PD
+But we can also test this per module. Here we obtain a distribution per module and estimate significane per module with or without Bonferroni correction (reducing the threshold for significance by dividing 0.05 by 5 modules).
+
+```{r test_significance_PD_within_modules, echo=TRUE, include=TRUE, eval=TRUE}
+<<test_significance_PD_within_modules>>
+```
+
+
+
+
+
+
+
+
+
+```{r disconnect from data base}
+dbDisconnect(db)
+```
