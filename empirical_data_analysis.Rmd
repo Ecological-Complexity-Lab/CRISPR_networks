@@ -1,5 +1,5 @@
 ---
-title: "Empirical data analysis for NEE revision"
+title: "Empirical data analysis"
 author: "Shai Pilosof"
 date: "April 16, 2020"
 output: github_document
@@ -27,12 +27,12 @@ library(infomapecology)
 ```
 
 ```{r connect to data base}
-db <- dbConnect(SQLite(), dbname = '/Users/Shai/GitHub/CRISPR_networks/CRISPR_database_V2.sqlite')
+db <- dbConnect(SQLite(), dbname = '/Users/Shai/GitHub/ecomplab/CRISPR_networks/CRISPR_database_V2.sqlite')
 ```
 
 # Analysis
 
-We analyze the modular structure of host-spacer networks and the weighted-nested structure of immunity networks in three data sets: Yellowstone, Pseudomonas with virus cluster 3 and Russia 2010.
+We analyze the modular structure of host-spacer networks and the weighted-nested structure of immunity networks in three data sets: Yellowstone, Pseudomonas with virus cluster 3 and Russia 2010. In the figures below the rows correspond to these 3 data sets, respectively.
 
 ```{r Load analysis, echo=FALSE, include=FALSE, eval=TRUE}
 <<analysis>>

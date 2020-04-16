@@ -223,9 +223,9 @@ main <- function(dataset_id, nsim=10, font_size=20){
 # Analysis ------------------------------------------------------------------
 
 ## @knitr analysis
-Yellowstone <- main(dataset_id = 1, nsim = 1, font_size = 10)
-Pseudomonas <- main(dataset_id = 3, nsim = 1, font_size = 10)
-Russia2010 <- main(dataset_id = 6, nsim = 1, font_size = 10)
+Yellowstone <- main(dataset_id = 1, nsim = 250, font_size = 10)
+Pseudomonas <- main(dataset_id = 3, nsim = 250, font_size = 10)
+Russia2010 <- main(dataset_id = 6, nsim = 250, font_size = 10)
 ## @knitr END
 
 pdf('/Users/Shai/Dropbox (BGU)/Apps/Overleaf/CRISPR-Networks-NEE/figures/SI_host_spacer_empirical.pdf',12,8)
@@ -299,7 +299,7 @@ data_host <- create_monolayer_object(data_host, directed = F, bipartite = T, gro
 host_sp_modularity <- run_infomap_monolayer(x = data_host, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, trials = 100, two_level = T, seed = 109743, signif = F)
 
 # Get the tree
-tree <- treeio::read.tree('~/GitHub/CRISPR/M2010_uzonroot_gtrgamma_raxml_1000boot.nwk')
+tree <- treeio::read.tree('~/GitHub/ecomplab/CRISPR_networks/M2010_uzonroot_gtrgamma_raxml_1000boot.nwk')
 D <- ape::cophenetic.phylo(tree) # Phyloegentic distance
 D <- matrix_to_list_unipartite(D, directed = T)
 D <- D$edge_list
@@ -339,7 +339,7 @@ D_obs <- M_obs %>%
   arrange(m, node_name) %>% 
   group_by(m) %>% # Per module
   filter(to %in% node_name) %>% #Host pairs within a module
-  summarise(d_mean=mean(d))
+  summarise(d_mean=mean(d), mod_size=n())
 D_obs_mean <- mean(D_obs$d_mean)
 ## @knitr END
 
@@ -401,7 +401,7 @@ D_perm %>%
   group_by(m) %>% 
   summarise(pvalue=sum(test)/nperm) %>% 
   mutate(Signif=ifelse(pvalue<0.05,'Signal','No signal'),
-         Signif_Bonferroni=ifelse(pvalue<0.05/5,'Signal','No signal')) # Need to divide by 5 (number of modules) for Bonferroni correction
+         Signif_Bonferroni=ifelse(pvalue<0.05/nrow(D_obs),'Signal','No signal')) # Need to divide by number of modules for Bonferroni correction
 ## @knitr END
 
 

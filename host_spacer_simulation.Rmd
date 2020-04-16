@@ -1,0 +1,956 @@
+---
+title: "Host-spacer networks in simulation 12499"
+author: "Shai Pilosof"
+date: "April 16, 2020"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+knitr::opts_knit$set(root.dir = "/Users/Shai/GitHub/ecomplab/CRISPR_networks/")
+```
+
+```{r LOAD PACKAGES, include=FALSE}
+library(tidyverse)
+library(magrittr)
+library(sqldf)
+library(cowplot)
+library(igraph)
+library(bipartite)
+library(infomapecology)
+library(ggtree)
+library(ape)
+library(treeio)
+```
+
+```{r initialize, include=FALSE}
+# !diagnostics off
+
+# parameters of the model; used by the functions, so need to initialize here
+beta=50;phi=10^-7;p=10^-5;q=10^-5;m=0.1;spacer_len=10
+
+on_Midway <- function(){ifelse(Sys.getenv('USER')=='pilosofs',T,F)}
+
+if (length(commandArgs(trailingOnly=TRUE))==0) {
+  # args <- c('mu5e-7_initialDiffDp1_S50P15_R-13997','5*10^-7','15',F, F)
+  args <- c('mu1e-7_initialDiffDp1_S10P15_R-12499','1*10^-7','15',F, T)
+} else {
+  args <- commandArgs(trailingOnly=TRUE)
+}
+base_name <- args[1]
+mu <- eval(parse(text = args[2]))
+protospacer_len <- eval(parse(text = args[3]))
+make_plots <- as.logical(args[4])
+complete_analysis <- as.logical(args[5])
+
+# Functions ---------------------------------------------------------------
+prep.packages <- function(package.list, verbose=T) {
+  loaded = package.list %in% .packages()
+  if ( all(loaded) ) return(invisible())
+  
+  package.list = package.list[!loaded]
+  installed = package.list %in% .packages(TRUE)
+  if ( !all(installed) ) install.packages(package.list[!installed], repos="http://cran.rstudio.com/")
+  for ( p in package.list ){
+    print(paste("Loading package:",p))
+    if (verbose){
+      library(p,character.only=TRUE)
+    } else {
+      suppressMessages(library(p,character.only=TRUE))  
+    }
+  }
+}
+
+returnnull <- function(x) if (is.null(x)){'none'} else {x}
+
+notify <- function(x){
+  print(paste('[',Sys.time(),'] ',x,sep=''))
+}
+
+empty <- function (web, count = FALSE) 
+{
+  web[is.na(web)] <- 0
+  if (NCOL(web) == 1 | NROW(web) == 1) {
+    if (NCOL(web) == 1 & NROW(web) != 1) {
+      nr <- sum(web > 0)
+      nc <- 1
+    }
+    if (NROW(web) == 1 & NCOL(web) != 1) {
+      nc <- sum(web > 0)
+      nr <- 1
+    }
+    if (NROW(web) == 1 & NCOL(web) == 1) {
+      nr <- 1
+      nc <- 1
+    }
+    out <- web[1:nr, 1:nc, drop = FALSE]
+    if (count) 
+      attr(out, "empty") <- c(`empty rows` = NROW(web) - 
+                                nr, `empty columns` = NCOL(web) - nc)
+    return(out)
+  }
+  cempty <- which(colSums(web) == 0)
+  rempty <- which(rowSums(web) == 0)
+  cind <- if (length(cempty) == 0) 
+    1:NCOL(web)
+  else (1:NCOL(web))[-cempty]
+  rind <- if (length(rempty) == 0) 
+    1:NROW(web)
+  else (1:NROW(web))[-rempty]
+  out <- web[rind, cind, drop = FALSE]
+  if (count) 
+    attr(out, "empty") <- c(`empty rows` = length(rempty), 
+                            `empty columns` = length(cempty))
+  return(out)
+}
+
+# Matrix trace
+tr <- function(x){
+  sum(diag(x))
+}
+
+calculate_ev_nestedness <- function(B){
+  # It is faster to calculate the ev for smaller matrices. Because the leading
+  # ev of BB^T and B^TB is the same, we first check how to produce A.
+  if (nrow(B)<ncol(B)){
+    A <- B%*%t(B)
+  } else {
+    A <- t(B)%*%B
+  }
+  ev_max <- max(eigen(A, symmetric = T, only.values = T)$values) # Not calculating eigenvectors speeds calculatoins remarkably.
+  return(ev_max)
+}
+
+# The upper bound is taken from Stanić Z. Inequalities for Graph Eigenvalues.
+# Cambridge University Press; 2015, page 51. It is calculated as:
+# \lambda_1^2\leq \frac{tr(BB^T)}{n_1}+\sqrt{\frac{n_1-1}{n_1}\left( tr((BB^T)^2)-\frac{tr(BB^T)^2}{n_1} \right)}
+# where n1 is the shorter dimension of B (also see function calculate_ev_nestedness)
+calculate_upper_bound <- function(B){
+  if (nrow(B)<ncol(B)){
+    A <- B%*%t(B)
+  } else {
+    A <- t(B)%*%B
+  }
+  n1 <- nrow(A)
+  x <- tr(A)/n1
+  y <- (n1-1)/n1
+  z <- tr(A%*%A)-tr(A)^2/n1
+  upper_bound <- x+sqrt(y*z)
+  return(upper_bound)
+}
+
+record_data <- function(x){
+  notify(paste('Recording ',deparse(substitute(x)),sep=''))
+  write_csv(x, paste(base_name,'_',deparse(substitute(x)),'.csv',sep=''), col_names = T)
+}
+
+make_name <- function(x,hr){
+  hr_str <- str_pad(hr, width = 4, side = 'left', pad = '0')
+  paste('data/',x,'_',hr_str,'.csv',sep='')
+}
+
+make_png <- function(p, method='ggsave'){
+  if (method=='ggsave'){
+    ggplot2::ggsave(paste('figures/',base_name,'_',deparse(substitute(p)),'.png',sep=''), p, device = 'png', width = 32, height = 18, units = 'cm', dpi = 200)
+  } else {
+    png(paste('figures/',base_name,'_',deparse(substitute(p)),'.png',sep=''),1920,1080,res=150)
+    print(p)
+    dev.off()
+  }
+}
+
+make_svg <- function(p){
+  svg(paste('figures/',base_name,'_',deparse(substitute(p)),'.svg',sep=''),12.8,8)
+  print(p)
+  dev.off()
+}
+
+make_png_svg <- function(p){
+  make_png(p)
+  make_svg(p)
+}
+
+standard_plot <- function(p){
+  p+scale_x_continuous(breaks=label_seq)+
+    geom_vline(xintercept=BDRs$start, col='#27AE60',size=1.2)+
+    geom_vline(xintercept=VDRs$start, col='purple',size=1.2)+
+    labs(x='Time')
+}
+
+plot_matrix <- function(M, layout='random', method = 'ggplot', binary_cols=c('gray','red'), title='', x_title='', y_title='', legend_title=''){
+  M_orig <- M
+  # M=M_orig
+  if (layout=='random'){
+    M <- M[sample(1:nrow(M), size = nrow(M), replace = F), sample(1:ncol(M), size = ncol(M), replace = F)]
+  }
+  
+  if (layout == "diagonal") {
+    ca <- cca(M)
+    M <- M[order(summary(ca)$sites[, 1], decreasing = TRUE), 
+           order(summary(ca)$species[, 1], decreasing = TRUE)]
+  }
+  
+  if (layout=='nested' & method == 'ggplot'){
+    tmp <- as.matrix(M[order(rowSums(M), decreasing = T), order(colSums(M),decreasing = F)])
+    rnames <- rownames(M)[order(rowSums(M), decreasing = T)]
+    cnames <- colnames(M)[order(colSums(M), decreasing = F)]
+    rownames(tmp) <- rnames
+    colnames(tmp) <- cnames
+    M <- tmp
+  }
+  if (layout=='nested' & method == 'heatmap'){
+    M <- M[order(rowSums(M), decreasing = T), order(colSums(M),decreasing = T)]
+  }
+  
+  if (identical(unique(as.vector(M)), c(0,1))){ # If binary matrix
+    colors=binary_cols
+  } else {
+    if (all(M==0)){ # If empty matrix
+      colors='gray'
+    } else {
+        colors=c('gray',gg_color_hue(n=max(M))) # If neither binary nor empty
+      }
+  }
+    
+  
+  if (method=='heatmap'){
+    heatmap(M, Rowv = NA, Colv = NA, 
+            symm = F, scale = 'none', revC = T, margins=c(7,7), 
+            # labRow = F, labCol = F, 
+            col=colors, main=title)
+    return(invisible())
+  }
+  
+  if (method=='ggplot'){
+    M <- reshape2::melt(M)
+    if (ncol(M)==1){ # If M has only one dimension after ordering M for the nestedness then reshaping does not work well.
+      M$Var1 <- rownames(M)
+      M$Var2 <- dimnames(M_orig)[[which(dim(M_orig)==1)]]
+    }
+    plt=as_tibble(M) %>% 
+      ggplot()+
+      geom_tile(aes(Var1,Var2,fill=value))+
+      scale_fill_gradientn(colours=colors, name=legend_title)+
+      theme(
+        axis.text.x=element_text(angle=-90),
+        axis.ticks = element_blank(),
+        axis.title = element_text(size = 18))+
+      labs(title=title, x=x_title,y=y_title)+
+      coord_fixed()
+    return(list(M=M,plt=plt))
+  }
+}
+
+gg_color_hue <- function(n, hue_min = 10, hue_max = 280, tune1 = 62, tune2 = 100) {
+  hues = seq(hue_min, hue_max, length=n+1)
+  hcl(h=hues, l=tune1, c=tune2)[1:n]
+}
+
+matrix_to_list_bipartite <- function(x){
+  g <- graph.incidence(t(x), weighted = T)
+  l_bip <- as_tibble(igraph::as_data_frame(g, "edges"))
+  return(l_bip)
+}
+
+list_to_matrix <- function(l, directed=F, bipartite=T){
+  # Only deal with first 3 columns.
+  g <- graph.data.frame(l,directed = directed)
+  if(bipartite){
+    V(g)$type <- V(g)$name %in% as.data.frame(l)[,1] # As.data.frame is necessary because if l is a tibble then l[,1] does not work
+    output_mat <- as_incidence_matrix(g, names = T, attr = 'w', sparse = F)
+  } else {
+    output_mat <- as_adjacency_matrix(g, names = T, sparse = F, attr = 'w')
+  }
+  # print(dim(output_mat))
+  # if(any(rowSums(output_mat)==0)){stop('One or more rows sum to 0')}
+  # if(any(colSums(output_mat)==0)){stop('One or more columns sum to 0')}
+  return(output_mat)
+}
+
+
+create_networks_hr <- function(virus_data,bacteria_data,hr){
+  virus_data_hr <- virus_data %>% filter(timesOfRecord==hr)
+  bacteria_data_hr <- bacteria_data %>% filter(timesOfRecord==hr)
+  virus_abund_hr <- virus_data_hr %>% select(label, density) %>% rename(V_ID=label) %>% mutate(V_ID=paste('V_',str_pad(V_ID, 4, 'left', '0'),sep=''))
+  bacteria_abund_hr <- bacteria_data_hr %>% select(label, density) %>% rename(B_ID=label) %>% mutate(B_ID=paste('B_',str_pad(B_ID, 4, 'left', '0'),sep=''))
+  
+  # Create networks in a list form
+  
+  ## Virus-protospacer network
+  virus_ps_hr_list <- virus_data_hr %>% select(-time, -timesOfRecord, -density) %>% 
+    gather(key='PSidx', value='value', -label) %>% 
+    rename(V_ID=label, PS=value) %>% 
+    arrange(V_ID,PS) %>% 
+    mutate(w=1) %>% 
+    mutate(V_ID=paste('V_',str_pad(V_ID, 4, 'left', '0'),sep='')) %>% 
+    mutate(PS=paste('P_',str_pad(PS, 4, 'left', '0'),sep='')) %>% 
+    select(V_ID,PS,w,PSidx)
+  
+  ## Bacteria-spacer network
+  bacteria_sp_hr_list <- bacteria_data_hr %>% 
+    select(-time, -timesOfRecord, -density) %>% 
+    gather(key='SPidx', value='value', -label) %>% 
+    filter(value!=-1) %>%
+    rename(B_ID=label, SP=value) %>% 
+    arrange(B_ID,SP) %>% 
+    mutate(w=1) %>%
+    # mutate(w=ifelse(SP==-1,0,1)) %>% 
+    mutate(B_ID=paste('B_',str_pad(B_ID, 4, 'left', '0'),sep='')) %>% 
+    mutate(SP=paste('P_',str_pad(SP, 4, 'left', '0'),sep='')) %>% 
+    select(B_ID,SP,w,SPidx)
+ 
+  # Bacteria without spacers: This is needed for NEUTRAL SCENARIOS in which
+  # interactions are not related to spacer-protospacer acquisition. So bacteria
+  # can actually survive without acquiting protospacers.
+  bacteria_no_sp <- bacteria_data_hr %>% 
+    select(-time, -timesOfRecord, -density) %>% 
+    gather(key='SPidx', value='value', -label) %>% 
+    filter(value==-1) %>% 
+    group_by(label) %>% 
+    summarise(no_spacers=n()) %>% filter(no_spacers==spacer_len) %>%
+    rename(B_ID=label) %>% 
+    mutate(B_ID=paste('B_',str_pad(B_ID, 4, 'left', '0'),sep=''))
+  
+  # Add to the bacteria-spacer network those bacteria without spacers.
+  suppressWarnings(
+    bacteria_sp_hr_list <- bind_rows(bacteria_sp_hr_list, 
+                                     as.tibble(expand.grid(B_ID=bacteria_no_sp$B_ID, SP=unique(bacteria_sp_hr_list$SP), w=0)))
+  )
+  ## Immunity network as a list
+  x <- virus_ps_hr_list %>% select(V_ID, PS)
+  y <- bacteria_sp_hr_list %>% 
+    filter(w!=0) %>% # MUST include only the interactions usign filter(w!=0), otherwise the immunity network will have false edges that should not exist.
+    select(B_ID, SP) 
+  immunity_list <- x %>% inner_join(y, by = c('PS'='SP')) %>% 
+    arrange(B_ID, V_ID) %>% 
+    group_by(V_ID, B_ID) %>% count() %>%
+    rename(w=n)
+  
+  # Define nodes in the system
+  viruses_hr <- sort(unique(virus_abund_hr$V_ID))
+  bacteria_hr <- sort(unique(bacteria_abund_hr$B_ID))
+  spacers_hr <- sort(union(bacteria_sp_hr_list$SP, virus_ps_hr_list$PS))
+  nodes <- tibble(nodeID=1:(length(viruses_hr)+length(bacteria_hr)+length(spacers_hr)),
+                  nodeName=c(viruses_hr, bacteria_hr, spacers_hr),
+                  type=c(rep(1,length(viruses_hr)), rep(2,length(bacteria_hr)), rep(3,length(spacers_hr)))
+  )
+  nodes$type <- as.integer(nodes$type)
+  
+  # Check networks
+  if (nrow(bacteria_sp_hr_list)==0) {bacteria_sp_hr_list <- NULL}
+  if (nrow(immunity_list)==0) {immunity_list <- NULL}
+  
+  ## Infection network
+  # To get this we first need to create the immunity nertwork as a matrix
+  if (!is.null(immunity_list)){
+    immunity_matrix <- list_to_matrix(immunity_list) # transform to a matrix format
+  } else {
+    immunity_matrix <- matrix(0, nrow=length(bacteria_hr), ncol=length(viruses_hr), dimnames = list(bacteria_hr, viruses_hr))
+  }
+
+  # Add all the nodes which were not included in the list because they have degree of zero
+  # missing_bacteria <- setdiff(unique(bacteria_sp_hr_list$B_ID),rownames(immunity_matrix)) 
+  # immunity_matrix <- rbind(immunity_matrix, matrix(0, 
+  #                                                    ncol = ncol(immunity_matrix),
+  #                                                    nrow = length(missing_bacteria),
+  #                                                    dimnames = list(missing_bacteria, colnames(immunity_matrix))))
+  # 
+  
+  infection_matrix <- 1*(immunity_matrix==0) # Binary infection network is the "negative (photography-wise)" of the immunity network
+  if (any(infection_matrix==1)){ # If there is at least one non-zero interaction in the infection network
+    N_T <- sum(bacteria_abund_hr$density)
+    # This will produce a matrix with values: (N_i*V_j)/N_T
+    A <- crossprod(matrix(bacteria_abund_hr$density, nrow=1,
+                          ncol=length(bacteria_abund_hr$density),
+                          dimnames=list(NULL, bacteria_abund_hr$B_ID)),
+                   matrix(virus_abund_hr$density, 
+                          nrow=1,ncol=length(virus_abund_hr$density)                        ,
+                          dimnames=list(NULL, virus_abund_hr$V_ID)))
+    A <- A/N_T
+    # This will remove all cells that are 0.
+    A <- A[rownames(infection_matrix),colnames(infection_matrix)]
+    infection_matrix <- infection_matrix*A 
+    # Transform the infection network to a list
+    g <- graph.incidence(t(infection_matrix), directed = F, weighted = T) # Need to transpose so the "from" would be viruses and the "to" would be bacteria
+    infection_list <- as.tibble(igraph::as_data_frame(g, what = 'edges'))
+    names(infection_list) <- c('V_ID', 'B_ID', 'w')
+  } else { # All interactions are 0
+    infection_list <- NULL
+  }
+  
+  # Calculate the effective mutation matrix. These lines here save a double for loop
+  # and selecting bacteria and virus abundances at each step.
+  # First produce a matrix with N_i*V_j values:
+  A <- crossprod(matrix(bacteria_abund_hr$density, nrow=1,  
+                        ncol=length(bacteria_abund_hr$density),
+                        dimnames=list(NULL, bacteria_abund_hr$B_ID)),
+                 matrix(virus_abund_hr$density, 
+                        nrow=1,ncol=length(virus_abund_hr$density)                        ,
+                        dimnames=list(NULL, virus_abund_hr$V_ID)))
+  A <- A[rownames(immunity_matrix),colnames(immunity_matrix)]
+  M0 <- 1*(immunity_matrix==0)
+  M0 <- M0*A*beta*mu*phi*(1-q) # This is from Childs et al 2012 Suppl Info, page 4. The multiplication by M0 thakes only the no matches
+  M1 <- 1*(immunity_matrix!=0)
+  M1 <- M1*A*beta*mu*phi*p # This is from Childs et al 2012 Suppl Info, page 4. The multiplication by M1 thakes only the  matches
+  mutation_matrix <- M0+M1
+
+  return(list(hr=hr,
+              virus_ps_list=virus_ps_hr_list,
+              bacteria_sp_list=bacteria_sp_hr_list,
+              immunity_list=immunity_list,
+              immunity_matrix=immunity_matrix,
+              infection_list=infection_list,
+              infection_matrix=infection_matrix,
+              mutation_matrix=mutation_matrix,
+              bacteria_no_sp=bacteria_no_sp,
+              virus_abund_hr=virus_abund_hr,
+              bacteria_abund_hr=bacteria_abund_hr,
+              nodes=nodes
+  ))
+}
+
+# A function to run Infomap on a unipartite/bipartite network.
+run_infomap <- function(edges, remove_zero_edges = T, return_L=F){
+  if (nrow(edges)==0 || is.null(edges)){
+    print('No edges!! Returning NULL')
+    return (NULL)
+  } else {
+    if (remove_zero_edges){
+      edges %<>% filter(w!=0)
+    }
+    edges <- as.data.frame(edges[,1:3])
+    # Create internal index for nodes
+    Set1 <- sort(unique(edges[,1]))
+    Set2 <- sort(unique(edges[,2]))
+    nodes <- data.frame(nodeID=1:(length(Set1)+length(Set2)), nodeName=c(Set1,Set2))
+    
+    # Transform node names to IDs
+    edges[,1] <- nodes$nodeID[match(edges[,1],nodes$nodeName)]
+    edges[,2] <- nodes$nodeID[match(edges[,2],nodes$nodeName)]
+    
+    write_delim(edges, 'infomap.txt', delim = ' ', col_names = F)
+    # system('./Infomap_v01926 infomap.txt . -N 20 --tree -2 --undirected --seed 123 -i link-list --silent --out-name infomap_out')
+    system('./Infomap_mac_01925 infomap.txt . -N 20 --tree -2 --undirected --seed 123 -i link-list --silent --out-name infomap_out')
+    modules_hr <- suppressMessages(read_delim('infomap_out.tree', delim = ' ', skip = 2, col_names = c('path', 'flow', 'name', 'node')))
+    modules_hr %<>% dplyr::select(name, path, nodeID=node) %>%
+      rowwise %>%
+      mutate(module=str_split(path,':')[[1]][1]) %>% 
+      dplyr::select(nodeID, module)
+    suppressMessages(
+      nodes %<>% inner_join(modules_hr) %>% mutate(module=as.integer(module), hr) %>% 
+        mutate(mod_hr=paste(hr,module,sep='_')) %>%  # This is a unique identifier of the module because the number of module will repeat in other hours.
+        dplyr::select(-nodeID)   # Remove that because it was an internal index for that function, so to not confuse with values outside the function
+    )
+    
+    if (return_L){
+      L <- read_lines('infomap_out.tree', n_max = 1)
+      L <- parse_number(str_sub(L, str_locate(L, 'to codelength')[1], str_length(L)))
+      return(list(L=L, modules=nodes))
+    } else {
+      return(as.tibble(nodes))
+    }
+  }
+}
+
+
+
+plot_modules <- function(network_list, m_df, remove_zero_edges=T){
+  if (remove_zero_edges){
+    network_list %<>% filter(w!=0)
+  }
+  M_set1 <- M_set2 <- network_list <- network_list[,1:3]
+  names(M_set1) <- names(M_set2) <- names(network_list) <- c('Set1','Set2','w')
+  suppressMessages(suppressWarnings(
+    M_set1 %<>% left_join(m_df, by=c('Set1'='nodeName')) %>% rename(module1=module,mod_hr1=mod_hr)
+  ))
+  suppressMessages(suppressWarnings(
+    M_set2 %<>% left_join(m_df, by=c('Set2'='nodeName')) %>% rename(module2=module,mod_hr2=mod_hr)
+  ))
+  suppressMessages(suppressWarnings(
+    M <- full_join(M_set1, M_set2, by = c("Set1", "Set2", "w")) %>% 
+      dplyr::select(hr=hr.x,Set1,Set2,w,module1,module2,mod_hr1,mod_hr2)
+  ))
+  Set1_modules <- unique(M_set1[,c('Set1','module1')])
+  Set1_modules <- with(Set1_modules, Set1_modules[order(module1,Set1),])
+  Set2_modules <- unique(M_set2[,c('Set2','module2')])
+  Set2_modules <- with(Set2_modules, Set2_modules[order(module2,Set2),])
+  
+  # If there are no interactions outside the module then do not need the gray
+  # color. Otherwise, it will plot the first module in gray.
+  M %<>% mutate(edge_in_out=ifelse(module1==module2,'in','out')) %>% 
+    mutate(value_mod=ifelse(edge_in_out=='in',module1,0)) %>% 
+    mutate(Set1=factor(Set1, levels=Set1_modules$Set1), Set2=factor(Set2, levels=Set2_modules$Set2))
+  
+  module_colors <- tibble(module1=unique(M$module1), col=gg_color_hue(n=length(unique(M$module1))))
+  
+  suppressMessages(suppressWarnings(
+  M %<>% left_join(module_colors) %>% mutate(col=ifelse(edge_in_out=='in',col,'gray'))
+  ))
+  
+  plt <- 
+    ggplot()+
+    geom_tile(data=M %>% filter(w!=0), aes(Set1, Set2,fill=col), colour='black') + # Interactions within modules
+     geom_tile(data=M %>% filter(w==0), aes(Set1, Set2), fill='white') + # Add nodes with no interactions, if they exist
+    scale_fill_identity()+
+    theme(legend.position='none',
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank(),
+          axis.text.x = element_text(angle=-90),
+          axis.title = element_blank(),
+          axis.ticks = element_blank())+
+    coord_fixed()
+
+  # geom_text(aes(V_ID,B_ID,label = value_mod))
+  return(plt)
+}
+
+get_regimes <- function (phage_time_series, d2_threshold=0.001, do_smoothing = T, make_plots=F) {
+  if (do_smoothing){print('Finding regimes with smoothing...')} else {print('Finding regimes without smoothing...')}
+  # Need to use the relative abundance of phages, because the total abundaces
+  # create huge numbers in the derivatives.
+  x <- phage_time_series %>% 
+    group_by(timesOfRecord) %>% 
+    summarise(a=sum(Pdensity)) %>% 
+    rename(time=timesOfRecord) %>% 
+    mutate(rel_abund=a/max(a, na.rm = T))
+  # Find 1st and 2nd derivatives of the time series
+  d1 <- diff(x$rel_abund)/diff(x$time) 
+  d1_df <- tibble(time=1:length(d1), d1=d1)
+  d2 <- diff(d1_df$d1)/diff(d1_df$time) 
+  d2_df <- tibble(time=1:length(d2), d2=d2)
+  # Define time series points as regimes. A point is defined in a regime if its 2nd derivative is lower than a threshold, d2_threshold
+  suppressMessages(
+  regimes <- x %>% left_join(d1_df) %>% left_join(d2_df) %>% 
+    mutate(regime=ifelse(abs(d2)<=d2_threshold,'BDR','VDR'))
+  )
+  # Find sequences of regimes/no regimes.
+  regime_seq <- rle(regimes$regime)
+  regime_seq <- tibble(len=regime_seq$lengths, regime=regime_seq$values) # len is the length of the sequence
+  # This allows to see points where dynamics switch from regimes to no regimes
+  regime_seq$switch=cumsum(regime_seq$len) # cumsum gives the point in the time series
+  
+  # Smoothing eliminates small blips where there is a few points of 'VDR'
+  # surrounded by many 'BDR'. This threshold is decided by the distribution of
+  # the lengths of no regime sequences. Sequences with length smaller than that
+  # threshold are defined as yes.
+  if (do_smoothing){
+    smoothing_threshold <- quantile(subset(regime_seq, regime=='VDR')$len, 0.75)
+    smoothing <- subset(regime_seq, len<=smoothing_threshold & regime=='VDR') %>% mutate(start=switch-len)
+    # smoothing$start[1] <- 1
+    for (i in 1:nrow(smoothing)){
+      # print(smoothing$start[i]:smoothing$switch[i])
+      regimes$regime[smoothing$start[i]:smoothing$switch[i]] <- 'BDR'
+    }
+    # After smoothing need to define regime sequences again
+    regime_seq <- rle(regimes$regime)
+    regime_seq <- tibble(len=regime_seq$lengths, regime=regime_seq$values)
+    regime_seq$switch=cumsum(regime_seq$len)
+  }
+  # To be a regime, a sequences has to be larger than the largest no-regime section,
+  # which is the virus outbreak with the largest duration.
+  max_virus_cycle <- max(subset(regime_seq, regime=='VDR')$len)
+  
+  regime_end <- which(regime_seq$len>max_virus_cycle)
+  regime_start <- which(regime_seq$len>max_virus_cycle)-1
+  regime_end <- regime_seq[regime_end,]$switch
+  regime_start <- regime_seq[regime_start,]$switch
+  if (length(regime_start)<length(regime_end)){
+    regime_end <- regime_end[-1]
+  }
+  
+  regimes_df <- rbind(
+    tibble(start=1, end=regime_start[1]-1, regime_type='VDR'), # Add the first no regime period
+    tibble(start=regime_start, end=regime_end, regime_type='BDR'),
+    tibble(start=regime_end+1, end=c(regime_start-1, stop_time)[-1], regime_type='VDR')
+  )
+  regimes_df$duration=regimes_df$end-regimes_df$start
+  regimes_df %<>% arrange(start)
+  
+  # Plot some diagnostics
+  if (make_plots){
+    plt_diagnostics <- 
+      regimes %>% 
+      gather(key='key', value='value', -time, -regime) %>% 
+      mutate(key=factor(key,levels = c('a','rel_abund','d1','d2'))) %>% 
+      ggplot()+
+      geom_line(aes(time, value))+
+      geom_point(aes(time, value, color=regime), size=0.5)+
+      scale_color_manual(values = c('#27AE60','purple'))+
+      scale_x_continuous(breaks = seq(0,max(x$time),500))+
+      # scale_x_continuous(limits=c(800,1000))+
+      facet_wrap(~key, scales='free', labeller = as_labeller(c(`a` = "Virus abundance",
+                                                               `d1` = "First derivative",
+                                                               `d2` = "Second derivative",
+                                                               `rel_abund` = "Virus relative abundance")))+
+      geom_vline(xintercept=regime_start, col='#27AE60')+
+      geom_vline(xintercept=regime_end, col='purple')+
+      theme(legend.position = 'none')+labs(x='Time')
+  } else {
+    plt_diagnostics <- NULL
+  }
+  return(list(regimes_df=regimes_df,
+              plt_diagnostics=plt_diagnostics))
+}
+
+
+
+print_pattern <- function(parent, child, parent_death, child_birth, child_death, node, i){
+  sprintf("(%s:%f, %s:%f)%s",
+          parent, parent_death-child_birth,
+          child, child_death-child_birth,
+          paste(node, i , sep = "_"))
+}
+
+nodes_dataframe_to_one_root <- function(nodes, parent, children, parent_death) {
+  for(i in 1:nrow(children)) {
+    newChildren <- nodes %>% filter(parent_id == children$id[i]) %>% arrange(desc(creation_time))
+    if (i == 1) {
+      tempParent<-parent
+      parent_death <- parent_death
+    }else{
+      tempParent<-out
+      parent_death<-children$creation_time[i-1]
+    }
+    if (nrow(newChildren) > 0) {
+      child <- nodes_dataframe_to_one_root(nodes, children$id[i], newChildren, children$death[i])
+      child_birth <- children$creation_time[i]
+      child_death <- newChildren$creation_time[nrow(newChildren)]
+    }else{
+      child <- children$id[i]
+      child_birth <- children$creation_time[i]
+      child_death <- children$death[i]
+    }
+    #print(list(tempParent, child, parent_death, child_birth, child_death))
+    out<-print_pattern(tempParent, child, parent_death, child_birth, child_death, parent, nrow(children)-i)
+  } 
+  return(out)
+}
+
+nodes_dataframe_to_newick <- function(nodes) {
+  root <- nodes %>% filter(is.na(parent_id))
+  
+  stopifnot(nrow(root) == 1)
+  
+  children <- nodes %>% filter(parent_id == root$id) %>% arrange(desc(creation_time))
+  head(children)
+  out<-nodes_dataframe_to_one_root(nodes, root$id[1], children, root$death[1])
+  return(paste(out,  ":", children$creation_time[nrow(children)] - root$creation_time[1], ";",sep = ""))
+}
+
+
+
+# Inititalize -------------------------------------------------------------
+dir.create('figures')
+
+virus_data <- read_delim(paste(base_name,'_data-phage.txt',sep=''), delim=' ', col_names = T)
+bacteria_data <- read_delim(paste(base_name,'_data-bact.txt',sep=''), delim=' ', col_names = T)
+bacteria_abundance <- read_delim(paste(base_name,'_Bacteria-abundance.txt',sep=''), delim = ' ')
+phage_abundance <- read_delim(paste(base_name,'_Phage-abundance.txt',sep=''), delim = ' ')
+
+stop_time <- min(max(virus_data$timesOfRecord), max(phage_abundance$timesOfRecord))
+hr_seq <- seq(1, stop_time, 1)
+
+print(paste('-------- Working simulation:',base_name,' | stop time: ',stop_time,' | mu: ',mu,' | protospacers: ', protospacer_len, ' | complete analysis: ',complete_analysis,' | make plots: ',make_plots,'---------'))
+
+if (complete_analysis){
+  print('Complete analysis')
+} else {
+  print('REDUCED analysis')
+}
+
+
+virus_data %<>% filter(timesOfRecord<=stop_time)
+bacteria_data %<>% filter(timesOfRecord<=stop_time)
+bacteria_abundance %<>% filter(timesOfRecord<=stop_time)
+phage_abundance %<>% filter(timesOfRecord<=stop_time)
+ 
+regimes_df <- get_regimes(phage_time_series = phage_abundance, do_smoothing = T)$regimes_df
+if (regimes_df[nrow(regimes_df),]$duration==1){regimes_df <- regimes_df[-nrow(regimes_df),]} # remove the end of simulation spurious effect
+if(on_Midway()){record_data(regimes_df)}
+BDRs <- subset(regimes_df, regime_type=='BDR')
+VDRs <- subset(regimes_df, regime_type=='VDR')
+
+# Vectors with the time points of VDRs and BDRs
+VDR_hrs <- unlist(apply(VDRs, MARGIN = 1, FUN = function(x) seq(x[1],x[2])))
+BDR_hrs <- unlist(apply(BDRs, MARGIN = 1, FUN = function(x) seq(x[1],x[2])))
+
+# This is for the x axis labels when plotting
+label_seq <- pretty(hr_seq, n=10)
+label_seq <- subset(label_seq, label_seq<stop_time)
+regimes_seq <- tibble(hr=c(VDR_hrs,BDR_hrs), regime_type=c(rep('VDR',length(VDR_hrs)),rep('BDR',length(BDR_hrs)))) %>% arrange(hr)
+if(on_Midway()){record_data(regimes_seq)}
+```
+
+```{r generate networks, include=FALSE}
+print('Generating networks...')
+all_networks <- vector(mode = 'list', length = length(hr_seq))
+for (hr in hr_seq){
+  nets <- create_networks_hr(virus_data, bacteria_data, hr)
+  all_networks[[which(hr_seq==hr)]] <- nets
+  notify(paste('Generated networks for time ',hr,'/',stop_time,sep=''))
+}
+```
+
+```{r diversification, echo=FALSE}
+# These data frames contain the extinction/mutation events and persistence of viruses/bacteria
+virus_dynamics_list <- virus_data %>%
+  filter(timesOfRecord<=max(hr_seq)) %>%
+  select(timesOfRecord, label) %>%
+  rename(V_ID=label) %>%
+  mutate(V_ID=paste('V_',str_pad(V_ID, 4, 'left', '0'),sep=''), w=1) %>%
+  arrange(timesOfRecord, V_ID)
+virus_dynamics_list %<>% group_by(V_ID) %>% summarise(birth=first(timesOfRecord), death=last(timesOfRecord)) %>%
+  mutate(persistence=death-birth+1)
+virus_dynamics_list %<>% filter(birth>=min(hr_seq), death<=max(hr_seq))
+
+
+bacteria_dynamics_list <-
+  bacteria_data %>%
+  filter(timesOfRecord<=max(hr_seq)) %>%
+  select(timesOfRecord, label) %>%
+  rename(B_ID=label) %>%
+  mutate(B_ID=paste('B_',str_pad(B_ID, 4, 'left', '0'),sep=''), w=1) %>%
+  arrange(timesOfRecord, B_ID)
+bacteria_dynamics_list %<>% group_by(B_ID) %>% summarise(birth=first(timesOfRecord), death=last(timesOfRecord)) %>%
+  mutate(persistence=death-birth+1)
+bacteria_dynamics_list %<>% filter(birth>=min(hr_seq), death<=max(hr_seq))
+```
+
+```{r trees, echo=FALSE}
+print(base_name)
+tree_data <- read_delim(paste(base_name,'_Phage-TREE.txt',sep=''), delim = '\t',col_names = c("Recordtime","id","parent_id","creation_time"))
+tree_data$id <- paste('V_',str_pad(tree_data$id, 4, 'left', '0'),sep='')
+tree_data$parent_id <- paste('V_',str_pad(tree_data$parent_id, 4, 'left', '0'),sep='')
+tree_data %<>% left_join(virus_dynamics_list %>% select(V_ID,death), by=c('id'='V_ID'))
+tree_data[1,3] <- NA
+tree_data$death[is.na(tree_data$death)]<-tree_data$creation_time[is.na(tree_data$death)]+1
+tree <- nodes_dataframe_to_newick(tree_data)
+writeLines(tree, 'tree.nwk')
+tree_viruses <- treeio::read.tree('tree.nwk')
+plt_viruses_tree <- 
+    standard_plot(
+      ggtree::ggtree(tree_viruses, ladderize = T) +
+        ggtree::theme_tree2()
+    )
+plt_viruses_tree
+
+tree_data <- read_delim(paste(base_name,'_Bacteria-TREE.txt',sep=''), delim = '\t',col_names = c("Recordtime","id","parent_id","creation_time"))
+tree_data$id <- paste('B_',str_pad(tree_data$id, 4, 'left', '0'),sep='')
+tree_data$parent_id <- paste('B_',str_pad(tree_data$parent_id, 4, 'left', '0'),sep='')
+tree_data %<>% left_join(bacteria_dynamics_list %>% select(B_ID,death), by=c('id'='B_ID'))
+tree_data[1,3] <- NA
+tree_data$death[is.na(tree_data$death)]<-tree_data$creation_time[is.na(tree_data$death)]+1
+tree <- nodes_dataframe_to_newick(tree_data)
+writeLines(tree, 'tree_bacteria.nwk')
+tree_bacteria <- treeio::read.tree('tree_bacteria.nwk')
+plt_bacteria_tree <- 
+      standard_plot(
+        ggtree::ggtree(tree_bacteria, ladderize = F) +
+          ggtree::theme_tree2()
+      )
+plt_bacteria_tree
+```
+
+# Host-spacer networks
+In this simulation there are 3 VDRs.
+
+```{R, echo=FALSE}
+VDRs
+```
+
+## Significance of host-spacer networks
+
+We aggregate the networks within each VDR. The network for VDR 1 is not significantly modular because it si very small. The other two are significantly modular.
+
+```{r host_spacer modularity, echo=FALSE}
+hs_modularity_aggregated <- NULL
+for (i in 1:nrow(VDRs)){
+  metaweb <- NULL
+  for (hr in VDRs$start[i]:VDRs$end[i]){
+    edges <- all_networks[[which(hr_seq==hr)]]$bacteria_sp_list
+    if(is.null(edges)){next}
+    metaweb %<>% bind_rows(edges) %>% distinct(B_ID, SP)
+  }
+  metaweb %<>% mutate(w=1)
+  x <- create_monolayer_object(metaweb, directed = F, bipartite = T)
+  host_sp_modularity <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, trials = 100, two_level = T, seed = 123, signif = T, shuff_method = 'r00', nsim = 100, verbose = F)
+
+plot_modular_matrix(host_sp_modularity)
+
+print(paste('VDR ',i,' Pvalue for modularity: ',host_sp_modularity$pvalue,sep='')) # Is modularity significant?
+
+tibble(L_sim=host_sp_modularity$L_sim) %>%
+  ggplot(aes(L_sim))+
+  geom_histogram(fill='plum')+
+  geom_vline(xintercept = host_sp_modularity$L, linetype='dashed')+
+  theme_bw()+
+  labs(x='Map equation L', y='Count')+
+  theme(legend.position='none', axis.text = element_text(size=10), axis.title = element_text(size=10))
+}
+```
+
+## Phylogenetic distance in host-spacer networks
+
+**This is done exactly as for the empirical network analysis of Russia 2010**
+
+We shuffle the observed networks to create permuted modules of the same size and recalculate the mean PD within modules. The shuffling permutes the ID of the strains. The null hypothesis is that the permuted distance is smaller than the observed for each module (i.e., no signal). If we **reject** this hypothesis then there is phylogenetic signal because the observed PD beteween hosts within each module would be smaller than expected by chance (closely related hosts share a module). We see that if we consider the mean of mean PD across modules then we indeed reject this hypothesis, so there is a phylogenetic signal.
+
+We see mixed results. In VDRs 1 and 2 there is no phylogenetic signal. In the third, it depends how you test (across modules or within modules) and in which modules.
+
+```{r host_spacer phylogenetic distance, echo=FALSE}
+# res <- NULL
+for (i in 1:nrow(VDRs)){
+  print('------------------------')
+  metaweb <- NULL
+  for (hr in VDRs$start[i]:VDRs$end[i]){
+    edges <- all_networks[[which(hr_seq==hr)]]$bacteria_sp_list
+    if(is.null(edges)){next}
+    metaweb %<>% bind_rows(edges) %>% distinct(B_ID, SP)
+  }
+  metaweb %<>% mutate(w=1)
+  x <- create_monolayer_object(metaweb, directed = F, bipartite = T)
+  host_sp_modularity <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, trials = 1, two_level = T, seed = 123, signif = F, verbose = F)
+
+  # Phylogenetic signal analysis
+  tree <- tree_bacteria
+  D <- ape::cophenetic.phylo(tree) # Phyloegentic distance
+  D <- matrix_to_list_unipartite(D, directed = T) # Use directed to make sure that the from column has all the nodes (need it for joining later)
+  D <- D$edge_list
+
+  # Difference between tree and matrix
+  nodes_in_modules <- host_sp_modularity$modules %>%
+    filter(str_starts(node_name, 'B')) %>%
+    distinct(node_name) %>%
+    mutate(node_name=str_replace_all(node_name, pattern = '\\.', ''))
+  nodes_in_modules <- nodes_in_modules$node_name
+  nodes_in_tree <- tree$tip.label
+  # print(setdiff(nodes_in_modules, nodes_in_tree)) # In modules but not in tree
+  # print(setdiff(nodes_in_tree, nodes_in_modules)) # In tree but not in modules
+  # Overlapping nodes:
+  overlapping <- intersect(nodes_in_tree, nodes_in_modules)
+
+  # Observed modules
+  M_obs <- host_sp_modularity$modules %>%
+    filter(str_starts(node_name, 'B')) %>%
+    mutate(node_name=str_replace_all(node_name, pattern = '\\.', '')) %>%
+    filter(node_name %in% overlapping) %>%
+    rename(m=module_level1) %>%
+    select(node_name, m)
+
+  #Mean PDistance between hosts within modules
+  D_obs <- M_obs %>%
+    inner_join(D, by=c('node_name'='from')) %>% # join PD distances
+    rename(d=weight) %>%
+    arrange(m, node_name) %>%
+    group_by(m) %>% # Per module
+    filter(to %in% node_name) %>% #Host pairs within a module
+    summarise(d_mean=mean(d), mod_size=n())
+  D_obs_mean <- mean(D_obs$d_mean)
+  
+  print('Observed network:')
+  print(D_obs)
+  
+  # res[[i]]$D_obs <- D_obs
+  # res[[i]]$D_obs_mean <- D_obs_mean
+  
+  #Shuffle to create permuted modules of the same size,
+  #and recalculate the meand PD within modules. The shuffling permutes the ID of the strains.
+  D_perm <- NULL
+  nperm <- 500
+  for (i in 1:nperm){
+    # print(i)
+    D_perm %<>% bind_rows(
+      M_obs %>%
+        mutate(node_name=sample(node_name, replace = F)) %>%
+        inner_join(D, by=c('node_name'='from')) %>% # join PD distances
+        rename(d=weight) %>%
+        arrange(m, node_name) %>%
+        group_by(m) %>% # Per module
+        filter(to %in% node_name) %>% #Host pairs within a module
+        summarise(d_mean=mean(d)) %>% # Calculate mean PD within modules
+        mutate(run=i)
+    )
+  }
+  # res[[i]]$D_perm <- D_perm
+  # print(D_perm)
+
+  # Null hypothesis is that the permuted distance is smaller than the observed for
+  # each module (i.e., no signal). If we reject this hypothesis then there is
+  # phylogenetic signal because the observed PD beteween hosts within each module
+  # would be smaller than expected by chance (closely related hosts share a module).
+
+  # Plot the means
+  print(
+  D_perm %>% group_by(run) %>%
+    summarise(D_perm_mean=mean(d_mean)) %>%
+    ggplot(aes(x=D_perm_mean))+geom_histogram()+geom_vline(xintercept = D_obs_mean)
+  )
+  print(
+  D_perm %>% group_by(run) %>%
+    summarise(D_perm=mean(d_mean)) %>%
+    mutate(test=D_perm<D_obs_mean) %>%
+    summarise(pvalue=sum(test)/nperm) %>%
+    mutate(res=ifelse(pvalue<0.05,'Signal','No signal'))
+  )
+  # This can also be tested per module
+  
+  print(
+  D_perm %>%
+    full_join(D_obs, by='m') %>%
+    rename(d_perm=d_mean.x, d_obs=d_mean.y) %>%
+    ggplot(aes(x=d_perm))+
+    geom_histogram()+
+    facet_wrap(~m)+
+    geom_vline(data = D_obs, aes(xintercept = d_mean))
+  )
+  print(
+  D_perm %>%
+    full_join(D_obs, by='m') %>%
+    rename(d_perm=d_mean.x, d_obs=d_mean.y) %>%
+    mutate(test=d_perm<d_obs) %>%
+    group_by(m) %>%
+    summarise(pvalue=sum(test)/nperm) %>%
+    mutate(Signif=ifelse(pvalue<0.05,'Signal','No signal'),
+           Signif_Bonferroni=ifelse(pvalue<0.05/nrow(D_obs),'Signal','No signal')) # Need to divide by number of modules for Bonferroni correction
+  )
+}
+```
+
+# Infection networks
+
+## Significance of modularity
+
+We test for significance at the end of each VDR, after the infection network has been built. The three infection networks are significantly modular.
+
+```{r infection networks, echo=FALSE}
+# Test at the end of each VDR
+infection_modularity <- NULL
+for (i in 1:nrow(VDRs)){
+  print('----------------------------------------')
+  hr <- VDRs$end[i]
+  edges <- all_networks[[which(hr_seq==hr)]]$infection_list
+  x <- create_monolayer_object(edges, directed = F, bipartite = T)
+  test <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, trials = 100, two_level = T, seed = 123, signif = T, shuff_method = 'r00', nsim = 100, verbose=F)
+  infection_modularity %<>%
+    bind_rows(tibble(hr=hr,
+                     pvalue=test$pvalue,
+                     n_hosts=ncol(x$mat),
+                     n_spacer=nrow(x$mat),
+                     n_interactions=sum(x$mat>0),
+                     n_modules=test$m))
+
+  print(plot_modular_matrix(test))
+
+  tibble(L_sim=test$L_sim) %>%
+    ggplot(aes(L_sim))+
+    geom_histogram(fill='plum')+
+    geom_vline(xintercept = test$L, linetype='dashed')+
+    theme_bw()+
+    labs(x='Map equation L', y='Count')+
+    theme(legend.position='none', axis.text = element_text(size=10), axis.title = element_text(size=10))
+}
+
+print(infection_modularity)
+```
+
