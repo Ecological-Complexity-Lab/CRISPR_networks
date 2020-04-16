@@ -7,8 +7,8 @@ library(bipartite)
 library(infomapecology)
 
 # setwd('/home/shai/Documents/CRISPR/Data/')
-setwd('/Users/Shai/GitHub/CRISPR_networks/')
-db <- dbConnect(SQLite(), dbname = '/Users/Shai/GitHub/CRISPR_networks/CRISPR_database_V2.sqlite')
+setwd('/Users/Shai/GitHub/ecomplab/CRISPR_networks/')
+db <- dbConnect(SQLite(), dbname = '/Users/Shai/GitHub/ecomplab/CRISPR_networks/CRISPR_database_V2.sqlite')
 
 # install_infomap(target_folder = getwd())
 
@@ -140,17 +140,17 @@ weighted_nestedness_significance <- function(M, weighted=F, nsim=10^3, shuff_met
               WNODF_obs=WNODF_obs,
               WNODF_shuffled=WNODF_shuffled$WNODF_shuffled,
               p_value_WNODF=p_value_WNODF
-              )
+  )
   
   if (make_plots){
     print('Plotting...')
     
-  p_shuffled_ev <- ggplot(ev_shuffled, aes(ev_shuffled))+geom_histogram(fill='steelblue')+
-    geom_vline(xintercept = ev_obs, linetype='dashed')+labs(x='Shuffled rho')
-  p_shuffled_WNODF <- ggplot(WNODF_shuffled, aes(WNODF_shuffled))+geom_histogram(fill='navy')+
-    geom_vline(xintercept = WNODF_obs, linetype='dashed')+labs(x='Shuffled WNODF')
-  out$plot_ev <- p_shuffled_ev
-  out$plot_WNODF <- p_shuffled_WNODF
+    p_shuffled_ev <- ggplot(ev_shuffled, aes(ev_shuffled))+geom_histogram(fill='steelblue')+
+      geom_vline(xintercept = ev_obs, linetype='dashed')+labs(x='Shuffled rho')
+    p_shuffled_WNODF <- ggplot(WNODF_shuffled, aes(WNODF_shuffled))+geom_histogram(fill='navy')+
+      geom_vline(xintercept = WNODF_obs, linetype='dashed')+labs(x='Shuffled WNODF')
+    out$plot_ev <- p_shuffled_ev
+    out$plot_WNODF <- p_shuffled_WNODF
   }
   
   return(out)  
@@ -196,7 +196,7 @@ main <- function(dataset_id, nsim=10, font_size=20){
     labs(x='Map equation L', y='Count')+
     theme(legend.position='none', axis.text = element_text(size=font_size), axis.title = element_text(size=font_size))
   
-
+  
   
   # Get immunity network
   matches_df <- get_matches(host_data = data_host$edge_list, virus_data = data_virus$edge_list, method = 'dataframe')

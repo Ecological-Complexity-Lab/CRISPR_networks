@@ -8,8 +8,8 @@ output: github_document
   
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = "/Users/Shai/GitHub/CRISPR_networks/")
-knitr:::read_chunk('/Users/Shai/GitHub/CRISPR_networks/empirical_data_analysis_revision.R')
+knitr::opts_knit$set(root.dir = "/Users/Shai/GitHub/ecomplab/CRISPR_networks/")
+knitr:::read_chunk('/Users/Shai/GitHub/ecomplab/CRISPR_networks/empirical_data_analysis_revision.R')
 ```
 
 ```{r LOAD PACKAGES, include=FALSE, echo=FALSE}
