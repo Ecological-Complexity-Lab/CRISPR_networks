@@ -752,6 +752,116 @@ plt_bacteria_tree <-
 plt_bacteria_tree
 ```
 
+```{r PD function}
+test_PD_modules<- function(tree, module_object, node_start_letter){
+  # Phylogenetic signal analysis
+  D <- ape::cophenetic.phylo(tree) # Phyloegentic distance
+  D <- matrix_to_list_unipartite(D, directed = T) # Use directed to make sure that the from column has all the nodes (need it for joining later)
+  D <- D$edge_list
+  
+  # Difference between tree and matrix
+  nodes_in_modules <- module_object$modules %>%
+    filter(str_starts(node_name, node_start_letter)) %>%
+    distinct(node_name) %>%
+    mutate(node_name=str_replace_all(node_name, pattern = '\\.', ''))
+  nodes_in_modules <- nodes_in_modules$node_name
+  nodes_in_tree <- tree$tip.label
+  # print(setdiff(nodes_in_modules, nodes_in_tree)) # In modules but not in tree
+  # print(setdiff(nodes_in_tree, nodes_in_modules)) # In tree but not in modules
+  # Overlapping nodes:
+  overlapping <- intersect(nodes_in_tree, nodes_in_modules)
+  
+  # Observed modules
+  M_obs <- module_object$modules %>%
+    filter(str_starts(node_name, node_start_letter)) %>%
+    mutate(node_name=str_replace_all(node_name, pattern = '\\.', '')) %>%
+    filter(node_name %in% overlapping) %>%
+    rename(m=module_level1) %>%
+    select(node_name, m)
+  
+  #Mean PDistance between hosts within modules
+  D_obs <- M_obs %>%
+    inner_join(D, by=c('node_name'='from')) %>% # join PD distances
+    rename(d=weight) %>%
+    arrange(m, node_name) %>%
+    group_by(m) %>% # Per module
+    filter(to %in% node_name) %>% #Host pairs within a module
+    summarise(d_mean=mean(d), mod_size=n())
+  D_obs_mean <- mean(D_obs$d_mean)
+  
+  # print('Observed network:')
+  # print(D_obs)
+  
+  #Shuffle to create permuted modules of the same size,
+  #and recalculate the meand PD within modules. The shuffling permutes the ID of the strains.
+  D_perm <- NULL
+  nperm <- 500
+  for (i in 1:nperm){
+    # print(i)
+    D_perm %<>% bind_rows(
+      M_obs %>%
+        mutate(node_name=sample(node_name, replace = F)) %>%
+        inner_join(D, by=c('node_name'='from')) %>% # join PD distances
+        rename(d=weight) %>%
+        arrange(m, node_name) %>%
+        group_by(m) %>% # Per module
+        filter(to %in% node_name) %>% #Host pairs within a module
+        summarise(d_mean=mean(d)) %>% # Calculate mean PD within modules
+        mutate(run=i)
+    )
+  }
+  
+  # Null hypothesis is that the permuted distance is smaller than the observed for
+  # each module (i.e., no signal). If we reject this hypothesis then there is
+  # phylogenetic signal because the observed PD beteween hosts within each module
+  # would be smaller than expected by chance (closely related hosts share a module).
+  
+  # Plot the means
+  plt_across_modules <- 
+    D_perm %>% group_by(run) %>%
+    summarise(D_perm_mean=mean(d_mean)) %>%
+    ggplot(aes(x=D_perm_mean))+geom_histogram()+geom_vline(xintercept = D_obs_mean)
+  
+  result_across_moduels <-
+    D_perm %>% group_by(run) %>%
+    summarise(D_perm=mean(d_mean)) %>%
+    mutate(test=D_perm<D_obs_mean) %>%
+    summarise(pvalue=sum(test)/nperm) %>%
+    mutate(res=ifelse(pvalue<0.05,'Signal','No signal'))
+  
+  # This can also be tested per module
+  plt_within_modules <-
+    D_perm %>%
+    full_join(D_obs, by='m') %>%
+    rename(d_perm=d_mean.x, d_obs=d_mean.y) %>%
+    ggplot(aes(x=d_perm))+
+    geom_histogram()+
+    facet_wrap(~m)+
+    geom_vline(data = D_obs, aes(xintercept = d_mean))
+  
+  result_within_moduels <-
+    D_perm %>%
+    full_join(D_obs, by='m') %>%
+    rename(d_perm=d_mean.x, d_obs=d_mean.y) %>%
+    mutate(test=d_perm<d_obs) %>%
+    group_by(m) %>%
+    summarise(pvalue=sum(test)/nperm) %>%
+    mutate(Signif=ifelse(pvalue<0.05,'Signal','No signal'),
+           Signif_Bonferroni=ifelse(pvalue<0.05/nrow(D_obs),'Signal','No signal')) # Need to divide by number of modules for Bonferroni correction
+  
+  out <- list(D_obs=D_obs,
+              D_obs_mean=D_obs_mean,
+              plt_across_modules=plt_across_modules,
+              plt_within_modules=plt_within_modules,
+              result_across_moduels=result_across_moduels,
+              result_within_moduels=result_within_moduels,
+              nodes_in_modules=nodes_in_modules,
+              nodes_in_tree=nodes_in_tree,
+              overlapping=overlapping)
+  return(out)
+}
+```
+
 # Host-spacer networks
 In this simulation there are 3 VDRs.
 
@@ -926,6 +1036,7 @@ We test for significance at the end of each VDR, after the infection network has
 ```{r infection networks, echo=FALSE}
 # Test at the end of each VDR
 infection_modularity <- NULL
+PD_results=list()
 for (i in 1:nrow(VDRs)){
   print('----------------------------------------')
   hr <- VDRs$end[i]
@@ -949,6 +1060,10 @@ for (i in 1:nrow(VDRs)){
     theme_bw()+
     labs(x='Map equation L', y='Count')+
     theme(legend.position='none', axis.text = element_text(size=10), axis.title = element_text(size=10))
+  
+  PD_results[[i]] <- test_PD_modules(tree_bacteria, test, 'B')
+  print(PD_results[[i]]$result_across_moduels)
+  print(PD_results[[i]]$result_within_moduels)
 }
 
 print(infection_modularity)
