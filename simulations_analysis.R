@@ -666,15 +666,15 @@ richness %<>% mutate(node_type=case_when(type==1~'viruses',
                                          type==3~'spacers'))
 record_data(richness)
 
-plt_richness_no_spacers <- 
+plt_richness <- 
   standard_plot(
-    ggplot(richness %>% filter(node_type!='spacers'), aes(hr, n, color=node_type))+
+    ggplot(richness, aes(hr, n, color=node_type))+
       geom_line(size=1.5)+
-      scale_color_manual(values = c('#27AE60','purple'))+
+      scale_color_manual(values = c('blue','brown', 'red'))+
       theme(legend.position = 'none')+
       labs(y='Richness')
   )
-make_png(plt_richness_no_spacers)
+make_png(plt_richness)
 
 plt_bacteria_richness_abundace <- 
   plot_grid(plt_bact_abund,
@@ -787,52 +787,6 @@ if (file.exists(paste(base_name,'_Bacteria-TREE.txt',sep=''))){
   make_svg(plt_bacteria_tree)
 }
 
-# Significance of modularity of host-spacer networks --------------------------------------
-
-# Agregate host-spacer networks within each VDR and test for significance of modularity
-host_sp_modularity <- NULL
-for (i in 1:nrow(VDRs)){
-  metaweb <- NULL
-  for (hr in VDRs$start[i]:VDRs$end[i]){
-    edges <- all_networks[[which(hr_seq==hr)]]$bacteria_sp_list
-    if(is.null(edges)){next}
-    metaweb %<>% bind_rows(edges) %>% distinct(B_ID, SP)
-  }
-  metaweb %<>% mutate(w=1) 
-  x <- create_monolayer_object(metaweb, directed = F, bipartite = T)
-  test <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, trials = 100, two_level = T, seed = 123, signif = T, shuff_method = 'r00', nsim = 100)
-  host_sp_modularity %<>% bind_rows(tibble(hr=hr, 
-                                             pvalue=test$pvalue,
-                                             n_hosts=ncol(x$mat),
-                                             n_spacer=nrow(x$mat),
-                                             n_interactions=sum(x$mat>0),
-                                             n_modules=max(test$modules$module_level1)))
-  
-}
-record_data(host_sp_modularity)
-
-# Phylogenetic signal in host-spacer modules ------------------------------
-# Agregate host-spacer networks within each VDR and test for significance of modularity
-phylogenetic_signal_hs <- NULL
-for (i in 1:nrow(VDRs)){
-  metaweb <- NULL
-  for (hr in VDRs$start[i]:VDRs$end[i]){
-    edges <- all_networks[[which(hr_seq==hr)]]$bacteria_sp_list
-    if(is.null(edges)){next}
-    metaweb %<>% bind_rows(edges) %>% distinct(B_ID, SP)
-  }
-  metaweb %<>% mutate(w=1) 
-  x <- create_monolayer_object(metaweb, directed = F, bipartite = T)
-  host_sp_modularity <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, 
-                                              trials = 100, two_level = T, seed = 123, 
-                                              signif = F)
-  pd_results <- test_PD_modules(tree = tree_bacteria, module_object = host_sp_modularity, node_start_letter = 'B')
-  out <- pd_results$result_within_moduels %>% left_join(pd_results$D_obs)
-  out$VDR <- i
-  phylogenetic_signal_hs <- rbind(phylogenetic_signal_hs, out)
-}
-record_data(phylogenetic_signal_hs)
-
 # Modularity of infection networks ----------------------------------------
 modules_df_infection <- NULL
 for (hr in hr_seq){
@@ -842,8 +796,8 @@ for (hr in hr_seq){
   nodes <- all_networks[[which(hr_seq==hr)]]$nodes
   x <- create_monolayer_object(edges, bipartite = T)
   modules <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, 
-                        trials = 100, two_level = T, seed = 123, 
-                        signif = F)
+                                   trials = 100, two_level = T, seed = 123, 
+                                   signif = F)
   if (!is.null(modules)){
     x <- modules$modules %>% select(node_id, node_name, m=module_level1) %>% mutate(hr=hr)
     modules_df_infection <- rbind(modules_df_infection, x)
@@ -875,23 +829,24 @@ plt_modules_infection <-
   )
 
 # Significance of modularity of infection networks --------------------------------------
-infection_modularity <- NULL
+infection_modularity_signif <- NULL
 # Test at the end of each VDR
 for (i in 1:nrow(VDRs)){
   hr <- VDRs$end[i]
   edges <- all_networks[[which(hr_seq==hr)]]$infection_list
   x <- create_monolayer_object(edges, directed = F, bipartite = T)
-  test <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, trials = 100, two_level = T, seed = 123, signif = T, shuff_method = 'r00', nsim = 100)
-  infection_modularity %<>% bind_rows(tibble(hr=hr, 
-                                             pvalue=test$pvalue,
-                                             n_hosts=ncol(x$mat),
-                                             n_spacer=nrow(x$mat),
-                                             n_interactions=sum(x$mat>0),
-                                             n_modules=max(test$modules$module_level1)))
+  test <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, trials = 100, two_level = T, seed = 123, signif = T, shuff_method = 'r00', nsim = 1000)
+  infection_modularity_signif %<>% bind_rows(tibble(hr=hr, 
+                                                    pvalue=test$pvalue,
+                                                    n_hosts=ncol(x$mat),
+                                                    n_spacer=nrow(x$mat),
+                                                    n_interactions=sum(x$mat>0),
+                                                    n_modules=max(test$modules$module_level1)))
   
   plot_modular_matrix(test)
 }
-record_data(infection_modularity)
+record_data(infection_modularity_signif)
+
 
 
 # Phylogenetic signal in infection networks --------------------------------------
@@ -908,6 +863,58 @@ for (i in 1:nrow(VDRs)){
   phylogenetic_signal_infection <- rbind(phylogenetic_signal_infection, out)
 }
 record_data(phylogenetic_signal_infection)
+
+
+
+# Significance of modularity of host-spacer networks --------------------------------------
+
+# Agregate host-spacer networks within each VDR and test for significance of modularity
+host_sp_modularity <- NULL
+for (i in 1:nrow(VDRs)){
+  metaweb <- NULL
+  for (hr in VDRs$start[i]:VDRs$end[i]){
+    edges <- all_networks[[which(hr_seq==hr)]]$bacteria_sp_list
+    if(is.null(edges)){next}
+    metaweb %<>% bind_rows(edges) %>% distinct(B_ID, SP)
+  }
+  metaweb %<>% mutate(w=1) 
+  x <- create_monolayer_object(metaweb, directed = F, bipartite = T)
+  test <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, trials = 100, two_level = T, seed = 123, signif = T, shuff_method = 'r00', nsim = 100)
+  host_sp_modularity %<>% bind_rows(tibble(hr=hr, 
+                                             pvalue=test$pvalue,
+                                             n_hosts=ncol(x$mat),
+                                             n_spacer=nrow(x$mat),
+                                             n_interactions=sum(x$mat>0),
+                                             n_modules=max(test$modules$module_level1)))
+  
+}
+record_data(host_sp_modularity)
+
+
+# Phylogenetic signal in host-spacer modules ------------------------------
+# Agregate host-spacer networks within each VDR and test for significance of modularity
+phylogenetic_signal_hs <- NULL
+for (i in 1:nrow(VDRs)){
+  metaweb <- NULL
+  for (hr in VDRs$start[i]:VDRs$end[i]){
+    edges <- all_networks[[which(hr_seq==hr)]]$bacteria_sp_list
+    if(is.null(edges)){next}
+    metaweb %<>% bind_rows(edges) %>% distinct(B_ID, SP)
+  }
+  metaweb %<>% mutate(w=1) 
+  x <- create_monolayer_object(metaweb, directed = F, bipartite = T)
+  host_sp_modularity <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, 
+                                              trials = 100, two_level = T, seed = 123, 
+                                              signif = F)
+  pd_results <- test_PD_modules(tree = tree_bacteria, module_object = host_sp_modularity, node_start_letter = 'B')
+  out <- pd_results$result_within_moduels %>% left_join(pd_results$D_obs)
+  out$VDR <- i
+  phylogenetic_signal_hs <- rbind(phylogenetic_signal_hs, out)
+}
+record_data(phylogenetic_signal_hs)
+
+
+
 
 
 # WNODF -------------------------------------------------------------------
@@ -1238,7 +1245,7 @@ notify('--> Generate final plots...')
 pdf(paste(base_name,'_main_figures.pdf',sep=''), 16, 10, onefile = T)
   title <- ggdraw() + draw_label("Viral and bacterial strain abundance", fontface='bold')
   grid.arrange(plot_grid(title, plt_abundance_profiles, ncol=1, rel_heights=c(0.1, 1)))
-  grid.arrange(plt_richness_no_spacers+labs(title = 'Richness of viruses bacteria and spacers'))
+  grid.arrange(plt_richness+labs(title = 'Richness of viruses, hosts and spacers'))
   title <- ggdraw() + draw_label("Bacteria abundance and richness", fontface='bold')
   grid.arrange(plot_grid(title, plt_bacteria_richness_abundace, ncol=1, rel_heights=c(0.1, 1)))
   grid.arrange(plt_spacer_matches+labs(title = 'Proportion of spacer matches'))
