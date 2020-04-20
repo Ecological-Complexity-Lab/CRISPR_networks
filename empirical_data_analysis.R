@@ -8,7 +8,7 @@ library(infomapecology)
 
 # setwd('/home/shai/Documents/CRISPR/Data/')
 setwd('/Users/Shai/GitHub/ecomplab/CRISPR_networks/')
-db <- dbConnect(SQLite(), dbname = '/Users/Shai/GitHub/ecomplab/CRISPR_networks/CRISPR_database_V2.sqlite')
+db <- dbConnect(SQLite(), dbname = '/Users/Shai/GitHub/ecomplab/CRISPR_networks/data/CRISPR_database_V2.sqlite')
 
 # install_infomap(target_folder = getwd())
 
@@ -223,9 +223,9 @@ main <- function(dataset_id, nsim=10, font_size=20){
 # Analysis ------------------------------------------------------------------
 
 ## @knitr analysis
-Yellowstone <- main(dataset_id = 1, nsim = 250, font_size = 10)
-Pseudomonas <- main(dataset_id = 3, nsim = 250, font_size = 10)
-Russia2010 <- main(dataset_id = 6, nsim = 250, font_size = 10)
+Yellowstone <- main(dataset_id = 1, nsim = 250, font_size = 20)
+Pseudomonas <- main(dataset_id = 3, nsim = 250, font_size = 20)
+Russia2010 <- main(dataset_id = 6, nsim = 250, font_size = 20)
 ## @knitr END
 
 pdf('/Users/Shai/Dropbox (BGU)/Apps/Overleaf/CRISPR-Networks-NEE/figures/SI_host_spacer_empirical.pdf',12,8)

@@ -21,6 +21,19 @@ make_plots <- as.logical(args[4])
 if(on_Midway()){system('module load gcc/6.1')}
 if(!on_Midway()){setwd(paste('data/',base_name,sep=''))}
 
+dir.create('figures')
+
+library(ggtree)
+library(ape)
+library(treeio)
+library(igraph)
+library(tidyverse)
+library(magrittr)
+library(bipartite)
+library(cowplot)
+library(grid)
+library(infomapecology)
+
 if(check_infomap()==F){install_infomap()} # Install infomap
 
 # Functions ---------------------------------------------------------------
@@ -491,18 +504,6 @@ test_PD_modules<- function(tree, module_object, node_start_letter){
 }
 
 # Inititalize -------------------------------------------------------------
-dir.create('figures')
-
-library(ggtree)
-library(ape)
-library(treeio)
-library(igraph)
-library(tidyverse)
-library(magrittr)
-library(bipartite)
-library(cowplot)
-library(grid)
-library(infomapecology)
 
 virus_data <- read_delim(paste(base_name,'_data-phage.txt',sep=''), delim=' ', col_names = T)
 bacteria_data <- read_delim(paste(base_name,'_data-bact.txt',sep=''), delim=' ', col_names = T)
