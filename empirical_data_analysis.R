@@ -156,6 +156,113 @@ weighted_nestedness_significance <- function(M, weighted=F, nsim=10^3, shuff_met
   return(out)  
 }
 
+test_PD_modules<- function(tree, module_object, node_start_letter){
+  # Phylogenetic signal analysis
+  D <- ape::cophenetic.phylo(tree) # Phyloegentic distance
+  D <- matrix_to_list_unipartite(D, directed = T) # Use directed to make sure that the from column has all the nodes (need it for joining later)
+  D <- D$edge_list
+  
+  # Difference between tree and matrix
+  nodes_in_modules <- module_object$modules %>%
+    filter(str_starts(node_name, node_start_letter)) %>%
+    distinct(node_name) %>%
+    mutate(node_name=str_replace_all(node_name, pattern = '\\.', ''))
+  nodes_in_modules <- nodes_in_modules$node_name
+  nodes_in_tree <- tree$tip.label
+  # print(setdiff(nodes_in_modules, nodes_in_tree)) # In modules but not in tree
+  # print(setdiff(nodes_in_tree, nodes_in_modules)) # In tree but not in modules
+  # Overlapping nodes:
+  overlapping <- intersect(nodes_in_tree, nodes_in_modules)
+  
+  # Observed modules
+  M_obs <- module_object$modules %>%
+    filter(str_starts(node_name, node_start_letter)) %>%
+    mutate(node_name=str_replace_all(node_name, pattern = '\\.', '')) %>%
+    filter(node_name %in% overlapping) %>%
+    rename(m=module_level1) %>%
+    select(node_name, m)
+  
+  #Mean PDistance between hosts within modules
+  D_obs <- M_obs %>%
+    inner_join(D, by=c('node_name'='from')) %>% # join PD distances
+    rename(d=weight) %>%
+    arrange(m, node_name) %>%
+    group_by(m) %>% # Per module
+    filter(to %in% node_name) %>% #Host pairs within a module
+    summarise(d_mean=mean(d), mod_size=n())
+  D_obs_mean <- mean(D_obs$d_mean)
+  
+  # print('Observed network:')
+  # print(D_obs)
+  
+  #Shuffle to create permuted modules of the same size,
+  #and recalculate the meand PD within modules. The shuffling permutes the ID of the strains.
+  D_perm <- NULL
+  nperm <- 500
+  for (i in 1:nperm){
+    # print(i)
+    D_perm %<>% bind_rows(
+      M_obs %>%
+        mutate(node_name=sample(node_name, replace = F)) %>%
+        inner_join(D, by=c('node_name'='from')) %>% # join PD distances
+        rename(d=weight) %>%
+        arrange(m, node_name) %>%
+        group_by(m) %>% # Per module
+        filter(to %in% node_name) %>% #Host pairs within a module
+        summarise(d_mean=mean(d)) %>% # Calculate mean PD within modules
+        mutate(run=i)
+    )
+  }
+  
+  # Null hypothesis is that the permuted distance is smaller than the observed for
+  # each module (i.e., no signal). If we reject this hypothesis then there is
+  # phylogenetic signal because the observed PD beteween hosts within each module
+  # would be smaller than expected by chance (closely related hosts share a module).
+  
+  # Plot the means
+  plt_across_modules <- 
+    D_perm %>% group_by(run) %>%
+    summarise(D_perm_mean=mean(d_mean)) %>%
+    ggplot(aes(x=D_perm_mean))+geom_histogram()+geom_vline(xintercept = D_obs_mean)
+  
+  result_across_moduels <-
+    D_perm %>% group_by(run) %>%
+    summarise(D_perm=mean(d_mean)) %>%
+    mutate(test=D_perm<D_obs_mean) %>%
+    summarise(pvalue=sum(test)/nperm) %>%
+    mutate(res=ifelse(pvalue<0.05,'Signal','No signal'))
+  
+  # This can also be tested per module
+  plt_within_modules <-
+    D_perm %>%
+    full_join(D_obs, by='m') %>%
+    rename(d_perm=d_mean.x, d_obs=d_mean.y) %>%
+    ggplot(aes(x=d_perm))+
+    geom_histogram()+
+    facet_wrap(~m)+
+    geom_vline(data = D_obs, aes(xintercept = d_mean))
+  
+  result_within_moduels <-
+    D_perm %>%
+    full_join(D_obs, by='m') %>%
+    rename(d_perm=d_mean.x, d_obs=d_mean.y) %>%
+    mutate(test=d_perm<d_obs) %>%
+    group_by(m) %>%
+    summarise(pvalue=sum(test)/nperm) %>%
+    mutate(Signif=ifelse(pvalue<0.05,'Signal','No signal'),
+           Signif_Bonferroni=ifelse(pvalue<0.05/nrow(D_obs),'Signal','No signal')) # Need to divide by number of modules for Bonferroni correction
+  
+  out <- list(D_obs=D_obs,
+              D_obs_mean=D_obs_mean,
+              plt_across_modules=plt_across_modules,
+              plt_within_modules=plt_within_modules,
+              result_across_moduels=result_across_moduels,
+              result_within_moduels=result_within_moduels,
+              nodes_in_modules=nodes_in_modules,
+              nodes_in_tree=nodes_in_tree,
+              overlapping=overlapping)
+  return(out)
+}
 
 # Function for main analysis ----------------------------------------------
 
@@ -223,9 +330,9 @@ main <- function(dataset_id, nsim=10, font_size=20){
 # Analysis ------------------------------------------------------------------
 
 ## @knitr analysis
-Yellowstone <- main(dataset_id = 1, nsim = 250, font_size = 20)
-Pseudomonas <- main(dataset_id = 3, nsim = 250, font_size = 20)
-Russia2010 <- main(dataset_id = 6, nsim = 250, font_size = 20)
+Yellowstone <- main(dataset_id = 1, nsim = 100, font_size = 10)
+Pseudomonas <- main(dataset_id = 3, nsim = 100, font_size = 10)
+Russia2010 <- main(dataset_id = 6, nsim = 100, font_size = 10)
 ## @knitr END
 
 pdf('/Users/Shai/Dropbox (BGU)/Apps/Overleaf/CRISPR-Networks-NEE/figures/SI_host_spacer_empirical.pdf',12,8)
@@ -284,7 +391,7 @@ write_res(Russia2010$immunity_nestedness$p_value_WNODF)
 
 # Phylogenetic signal for Russia2010 data set -----------------------------------------
 
-## @knitr load_data_phylogenetic_analysis
+## @knitr phylogenetic_analysis
 criterium <- '4mm/-PAM'
 dataset_id <- 6
 as_tibble(dbGetQuery(db, paste('SELECT name FROM data_sets WHERE id=',dataset_id,sep='')))
@@ -299,109 +406,9 @@ data_host <- create_monolayer_object(data_host, directed = F, bipartite = T, gro
 host_sp_modularity <- run_infomap_monolayer(x = data_host, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, trials = 100, two_level = T, seed = 109743, signif = F)
 
 # Get the tree
-tree <- treeio::read.tree('~/GitHub/ecomplab/CRISPR_networks/M2010_uzonroot_gtrgamma_raxml_1000boot.nwk')
-D <- ape::cophenetic.phylo(tree) # Phyloegentic distance
-D <- matrix_to_list_unipartite(D, directed = T)
-D <- D$edge_list
-## @knitr END
+tree <- treeio::read.tree('~/GitHub/ecomplab/CRISPR_networks/data/M2010_uzonroot_gtrgamma_raxml_1000boot.nwk')
 
-plot_modular_matrix(host_sp_modularity, fix_coordinates = F)
-plot(tree)
-
-## @knitr strains_tree_network
-# Difference between tree and matrix
-nodes_in_modules <- host_sp_modularity$modules %>%
-  filter(str_starts(node_name, 'M')) %>%
-  distinct(node_name) %>% 
-  mutate(node_name=str_replace_all(node_name, pattern = '\\.', ''))
-nodes_in_modules <- nodes_in_modules$node_name
-nodes_in_tree <- tree$tip.label
-print(setdiff(nodes_in_modules, nodes_in_tree)) # In modules but not in tree
-print(setdiff(nodes_in_tree, nodes_in_modules)) # In tree but not in modules
-# Overlapping nodes:
-(overlapping <- intersect(nodes_in_tree, nodes_in_modules))
-## @knitr END
-
-
-## @knitr PD_within_modules
-# Observed modules
-M_obs <- host_sp_modularity$modules %>%
-  filter(str_starts(node_name, 'M')) %>% 
-  mutate(node_name=str_replace_all(node_name, pattern = '\\.', '')) %>% 
-  filter(node_name %in% overlapping) %>% 
-  rename(m=module_level1) %>% 
-  select(node_name, m)
-
-#Mean PDistance between hosts within modules
-D_obs <- M_obs %>%  
-  inner_join(D, by=c('node_name'='from')) %>% # join PD distances
-  rename(d=weight) %>% 
-  arrange(m, node_name) %>% 
-  group_by(m) %>% # Per module
-  filter(to %in% node_name) %>% #Host pairs within a module
-  summarise(d_mean=mean(d), mod_size=n())
-D_obs_mean <- mean(D_obs$d_mean)
-## @knitr END
-
-## @knitr permute_modules
-#Shuffle to create permuted modules of the same size,
-#and recalculate the meand PD within modules. The shuffling permutes the ID of the strains.
-D_perm <- NULL
-nperm <- 500
-for (i in 1:nperm){
-  print(i)
-  D_perm %<>% bind_rows(
-    M_obs %>%
-      mutate(node_name=sample(node_name, replace = F)) %>% 
-      inner_join(D, by=c('node_name'='from')) %>% # join PD distances
-      rename(d=weight) %>% 
-      arrange(m, node_name) %>% 
-      group_by(m) %>% # Per module
-      filter(to %in% node_name) %>% #Host pairs within a module
-      summarise(d_mean=mean(d)) %>% # Calculate mean PD within modules
-      mutate(run=i)
-  )
-}
-print(D_perm)
-## @knitr END
-
-# Null hypothesis is that the permuted distance is smaller than the observed for
-# each module (i.e., no signal). If we reject this hypothesis then there is
-# phylogenetic signal because the observed PD beteween hosts within each module
-# would be smaller than expected by chance (closely related hosts share a module).
-
-## @knitr test_significance_PD_across_modules
-# Plot the means 
-D_perm %>% group_by(run) %>% 
-  summarise(D_perm_mean=mean(d_mean)) %>% 
-  ggplot(aes(x=D_perm_mean))+geom_histogram()+geom_vline(xintercept = D_obs_mean)
-
-D_perm %>% group_by(run) %>% 
-  summarise(D_perm=mean(d_mean)) %>% 
-  mutate(test=D_perm<D_obs_mean) %>%
-  summarise(pvalue=sum(test)/nperm) %>% 
-  mutate(res=ifelse(pvalue<0.05,'Signal','No signal'))
-## @knitr END
-
-## @knitr test_significance_PD_within_modules
-# This can also be tested per module
-observations <- nperm*nrow(D_obs)
-D_perm %>% 
-  full_join(D_obs, by='m') %>% 
-  rename(d_perm=d_mean.x, d_obs=d_mean.y) %>% 
-  ggplot(aes(x=d_perm))+
-  geom_histogram()+
-  facet_wrap(~m)+
-  geom_vline(data = D_obs, aes(xintercept = d_mean))
-
-D_perm %>% 
-  full_join(D_obs, by='m') %>% 
-  rename(d_perm=d_mean.x, d_obs=d_mean.y) %>% 
-  mutate(test=d_perm<d_obs) %>%  
-  group_by(m) %>% 
-  summarise(pvalue=sum(test)/nperm) %>% 
-  mutate(Signif=ifelse(pvalue<0.05,'Signal','No signal'),
-         Signif_Bonferroni=ifelse(pvalue<0.05/nrow(D_obs),'Signal','No signal')) # Need to divide by number of modules for Bonferroni correction
+phylo_dist_signif <- test_PD_modules(tree, host_sp_modularity, 'M')
 ## @knitr END
 
 

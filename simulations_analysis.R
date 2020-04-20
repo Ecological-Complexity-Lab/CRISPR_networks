@@ -9,7 +9,7 @@ on_Midway <- function(){ifelse(Sys.getenv('USER')=='pilosofs',T,F)}
 # If run with an sbatch pipeline take arguments from there. Otherwise those specified here.
 if (length(commandArgs(trailingOnly=TRUE))==0) {
   # args <- c('mu5e-7_initialDiffDp1_S50P15_R-13997','5*10^-7','15',F, F)
-  args <- c('mu1e-7_initialDiffDp1_S10P15_R-12499','1*10^-7','15',F, T)
+  args <- c('mu1e-7_initialDiffDp1_S10P15_R-0001','1*10^-7','15',F, T)
 } else {
   args <- commandArgs(trailingOnly=TRUE)
 }
@@ -602,6 +602,7 @@ print('Generating networks...')
 all_networks <- vector(mode = 'list', length = length(hr_seq))
 for (hr in hr_seq){
   nets <- create_networks_hr(virus_data, bacteria_data, hr)
+  print(nets$nodes %>% group_by(type) %>% count())
   all_networks[[which(hr_seq==hr)]] <- nets
   notify(paste('Generated networks for time ',hr,'/',stop_time,sep=''))
 }
