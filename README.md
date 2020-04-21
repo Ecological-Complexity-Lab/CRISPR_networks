@@ -18,7 +18,7 @@ We also include a list with all the seeds for the 100 simulations we ran in file
 
 Output of the stochastic simulations is the input of the file `simulations_analysis.R`. We also include the file `host_spacer_simulation.Rmd` for specific analysis of modularity and phylogenetic distance in host-spacer and infection networks.
 
-### Reuqirements
+### Requirements
 
 * The code is written in R and requires the packages specified in the code. Modularity analysis is performed with package [infomapecology](https://github.com/Ecological-Complexity-Lab/infomap_ecology_package). See instructions for installation there.
 * The analysis is computationally intensive and we ran it on the Midway HPC cluster at the University of Chicago. Some adaptation of the R code will be necessary to adequate it to other HPC systems.
