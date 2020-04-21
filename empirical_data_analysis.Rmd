@@ -27,7 +27,7 @@ library(infomapecology)
 ```
 
 ```{r connect to data base}
-db <- dbConnect(SQLite(), dbname = '/Users/Shai/GitHub/ecomplab/CRISPR_networks/data/CRISPR_database_V2.sqlite')
+db <- dbConnect(SQLite(), dbname = '/Users/Shai/GitHub/ecomplab/CRISPR_networks/data/CRISPR_database_NEE.sqlite')
 ```
 
 # Analysis

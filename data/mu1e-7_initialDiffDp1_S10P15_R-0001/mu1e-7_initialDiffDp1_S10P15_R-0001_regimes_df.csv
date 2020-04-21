@@ -1,6 +1,0 @@
-start,end,regime_type,duration
-1,47,VDR,46
-48,582,BDR,534
-583,848,VDR,265
-849,1000,BDR,151
-1001,1000,VDR,-1

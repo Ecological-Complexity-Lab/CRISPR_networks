@@ -1,3 +1,5 @@
+# Set up ------------------------------------------------------------------
+
 # !diagnostics off
 
 # parameters of the model; used by the functions, so need to initialize here
@@ -37,23 +39,6 @@ library(infomapecology)
 if(check_infomap()==F){install_infomap()} # Install infomap
 
 # Functions ---------------------------------------------------------------
-prep.packages <- function(package.list, verbose=T) {
-  loaded = package.list %in% .packages()
-  if ( all(loaded) ) return(invisible())
-  
-  package.list = package.list[!loaded]
-  installed = package.list %in% .packages(TRUE)
-  if ( !all(installed) ) install.packages(package.list[!installed], repos="http://cran.rstudio.com/")
-  for ( p in package.list ){
-    print(paste("Loading package:",p))
-    if (verbose){
-      library(p,character.only=TRUE)
-    } else {
-      suppressMessages(library(p,character.only=TRUE))  
-    }
-  }
-}
-
 returnnull <- function(x) if (is.null(x)){'none'} else {x}
 
 notify <- function(x){
@@ -86,16 +71,12 @@ make_svg <- function(p){
   dev.off()
 }
 
-make_png_svg <- function(p){
-  make_png(p)
-  make_svg(p)
-}
-
 standard_plot <- function(p){
   p+scale_x_continuous(breaks=label_seq)+
     geom_vline(xintercept=BDRs$start, col='#27AE60',size=1.2)+
     geom_vline(xintercept=VDRs$start, col='purple',size=1.2)+
-    labs(x='Time')
+    labs(x='Time')+
+    theme_bw()+theme(legend.position = 'none')
 }
 
 gg_color_hue <- function(n, hue_min = 10, hue_max = 280, tune1 = 62, tune2 = 100) {
@@ -503,6 +484,7 @@ test_PD_modules<- function(tree, module_object, node_start_letter){
   return(out)
 }
 
+
 # Inititalize -------------------------------------------------------------
 
 virus_data <- read_delim(paste(base_name,'_data-phage.txt',sep=''), delim=' ', col_names = T)
@@ -510,6 +492,7 @@ bacteria_data <- read_delim(paste(base_name,'_data-bact.txt',sep=''), delim=' ',
 bacteria_abundance <- read_delim(paste(base_name,'_Bacteria-abundance.txt',sep=''), delim = ' ')
 phage_abundance <- read_delim(paste(base_name,'_Phage-abundance.txt',sep=''), delim = ' ')
 
+# Defined the length of the simulation
 stop_time <- min(max(virus_data$timesOfRecord), max(phage_abundance$timesOfRecord))
 hr_seq <- seq(1, stop_time, 1)
 
@@ -535,6 +518,7 @@ label_seq <- pretty(hr_seq, n=10)
 label_seq <- subset(label_seq, label_seq<stop_time)
 regimes_seq <- tibble(hr=c(VDR_hrs,BDR_hrs), regime_type=c(rep('VDR',length(VDR_hrs)),rep('BDR',length(BDR_hrs)))) %>% arrange(hr)
 record_data(regimes_seq)
+
 
 # bacteria / phage diversity ----------------------------------------------
 notify('Generating abundance profile plots...')
@@ -597,16 +581,17 @@ plt_abundance_profiles <- plot_grid(plt_bact_abund, plt_virus_abund, nrow=2, ali
 make_png(plt_abundance_profiles)
 make_svg(plt_abundance_profiles)
 
+
+
 # Generate networks -------------------------------------------------------
 print('Generating networks...')
 all_networks <- vector(mode = 'list', length = length(hr_seq))
 for (hr in hr_seq){
   nets <- create_networks_hr(virus_data, bacteria_data, hr)
-  print(nets$nodes %>% group_by(type) %>% count())
+  # print(nets$nodes %>% group_by(type) %>% count())
   all_networks[[which(hr_seq==hr)]] <- nets
   notify(paste('Generated networks for time ',hr,'/',stop_time,sep=''))
 }
-
 
 
 # Measures of diversity ---------------------------------------------------
@@ -690,6 +675,7 @@ make_png(plt_bacteria_richness_abundace)
 make_svg(plt_bacteria_richness_abundace)
 
 
+
 # Phage and bacteria diversification ----------------------------------
 print(' ------- Creating virus and bacteria persistence data frames -------')
 
@@ -709,8 +695,8 @@ record_data(virus_dynamics_list)
 plt_virus_persistence <- 
   standard_plot(
       ggplot(virus_dynamics_list)+
-      geom_rect(aes(ymin=parse_number(virus_dynamics_list$V_ID),
-                    ymax=parse_number(virus_dynamics_list$V_ID), 
+      geom_rect(aes(ymin=parse_number(V_ID),
+                    ymax=parse_number(V_ID), 
                     xmin=birth, 
                     xmax=death), color='red',
                 size=0.7)+
@@ -748,6 +734,7 @@ plt_bacteria_persistence <-
 make_png(plt_bacteria_persistence)
 make_svg(plt_bacteria_persistence)
 
+
 # Trees -------------------------------------------------------------------
 tree_data <- read_delim(paste(base_name,'_Phage-TREE.txt',sep=''), delim = '\t',col_names = c("Recordtime","id","parent_id","creation_time"))
 tree_data$id <- paste('V_',str_pad(tree_data$id, 4, 'left', '0'),sep='')
@@ -769,25 +756,24 @@ make_svg(plt_viruses_tree)
 
 
 # Bacteria tree
-if (file.exists(paste(base_name,'_Bacteria-TREE.txt',sep=''))){
-  tree_data <- read_delim(paste(base_name,'_Bacteria-TREE.txt',sep=''), delim = '\t',col_names = c("Recordtime","id","parent_id","creation_time"))
-  tree_data$id <- paste('B_',str_pad(tree_data$id, 4, 'left', '0'),sep='')
-  tree_data$parent_id <- paste('B_',str_pad(tree_data$parent_id, 4, 'left', '0'),sep='')
-  tree_data %<>% left_join(bacteria_dynamics_list %>% select(B_ID,death), by=c('id'='B_ID'))
-  tree_data[1,3] <- NA
-  tree_data$death[is.na(tree_data$death)]<-tree_data$creation_time[is.na(tree_data$death)]+1
-  tree <- nodes_dataframe_to_newick(tree_data)
-  writeLines(tree, 'tree_bacteria.nwk')
-  tree_bacteria <- treeio::read.tree('tree_bacteria.nwk')
-  plt_bacteria_tree <- 
-    standard_plot(
-      ggtree::ggtree(tree_bacteria, ladderize = F) +
-        ggtree::theme_tree2()
-    )
-    
-  make_png(plt_bacteria_tree)
-  make_svg(plt_bacteria_tree)
-}
+tree_data <- read_delim(paste(base_name,'_Bacteria-TREE.txt',sep=''), delim = '\t',col_names = c("Recordtime","id","parent_id","creation_time"))
+tree_data$id <- paste('B_',str_pad(tree_data$id, 4, 'left', '0'),sep='')
+tree_data$parent_id <- paste('B_',str_pad(tree_data$parent_id, 4, 'left', '0'),sep='')
+tree_data %<>% left_join(bacteria_dynamics_list %>% select(B_ID,death), by=c('id'='B_ID'))
+tree_data[1,3] <- NA
+tree_data$death[is.na(tree_data$death)]<-tree_data$creation_time[is.na(tree_data$death)]+1
+tree <- nodes_dataframe_to_newick(tree_data)
+writeLines(tree, 'tree_bacteria.nwk')
+tree_bacteria <- treeio::read.tree('tree_bacteria.nwk')
+plt_bacteria_tree <- 
+  standard_plot(
+    ggtree::ggtree(tree_bacteria, ladderize = F) +
+      ggtree::theme_tree2()
+  )
+  
+make_png(plt_bacteria_tree)
+make_svg(plt_bacteria_tree)
+
 
 # Modularity of infection networks ----------------------------------------
 modules_df_infection <- NULL
@@ -798,7 +784,7 @@ for (hr in hr_seq){
   nodes <- all_networks[[which(hr_seq==hr)]]$nodes
   x <- create_monolayer_object(edges, bipartite = T)
   modules <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, 
-                                   trials = 100, two_level = T, seed = 123, 
+                                   trials = 20, two_level = T, seed = 123, 
                                    signif = F)
   if (!is.null(modules)){
     x <- modules$modules %>% select(node_id, node_name, m=module_level1) %>% mutate(hr=hr)
@@ -819,7 +805,7 @@ record_data(modules_df_infection)
 
 plt_modules_infection <- 
   standard_plot(
-    modules_df %>% group_by(hr) %>% summarise(num_mod=length(unique(m))) %>% 
+    modules_df_infection %>% group_by(hr) %>% summarise(num_mod=length(unique(m))) %>% 
       ggplot(aes(hr,num_mod))+
       geom_line(size=1.2)+
       labs(y='Number of modules')+
@@ -829,6 +815,9 @@ plt_modules_infection <-
         legend.position = 'none'
       )
   )
+make_png(plt_modules_infection)
+make_svg(plt_modules_infection)
+
 
 # Significance of modularity of infection networks --------------------------------------
 infection_modularity_signif <- NULL
@@ -851,6 +840,7 @@ record_data(infection_modularity_signif)
 
 
 
+
 # Phylogenetic signal in infection networks --------------------------------------
 phylogenetic_signal_infection <- NULL
 # Test at the end of each VDR
@@ -865,6 +855,7 @@ for (i in 1:nrow(VDRs)){
   phylogenetic_signal_infection <- rbind(phylogenetic_signal_infection, out)
 }
 record_data(phylogenetic_signal_infection)
+
 
 
 
@@ -916,9 +907,6 @@ for (i in 1:nrow(VDRs)){
 record_data(phylogenetic_signal_hs)
 
 
-
-
-
 # WNODF -------------------------------------------------------------------
 
 WNODF_df <- NULL
@@ -942,6 +930,7 @@ plt_WNODF <-
   )
 make_png(plt_WNODF)
 make_svg(plt_WNODF)
+
 
 # Spacer matches ------------------------------------
 spacer_matches <- NULL
@@ -1015,6 +1004,7 @@ make_png(plt_spacer_matches)
 make_svg(plt_spacer_matches)
 
 
+
 # Extinctions -------------------------------------------------------------
 
 # Get the order in which extinctions happen: Is it from the most protected to the least protected?
@@ -1023,7 +1013,7 @@ ext_immunity_rank <- NULL
 for (i in 1:nrow(virus_dynamics_list)){
   hr <- virus_dynamics_list[i,3]$death
   v_ext <- virus_dynamics_list[i,1]$V_ID
-  # Pull out the immunity network at the time. 
+  # Pull the immunity network at the time. 
   x <- all_networks[[which(hr_seq==hr)]]$immunity_matrix
   # Get the immunity ranks. Duplicates eliminated to avoid ties
   virus_immunity_total <- sort(unique(colSums(x)), decreasing = F)
@@ -1042,12 +1032,9 @@ plt_extinction_rank <- ggplot(ext_immunity_rank, aes(ext_immunity_rank))+
 make_png(plt_extinction_rank)
 make_svg(plt_extinction_rank)
 
-
-virus_dynamics_list %<>%
-  left_join(ext_immunity_rank) %>%
-  mutate(high_rank=ifelse(ext_immunity_rank>median(ext_immunity_rank),T,F))
-
-
+# virus_dynamics_list %<>%
+#   left_join(ext_immunity_rank) %>%
+#   mutate(high_rank=ifelse(ext_immunity_rank>median(ext_immunity_rank),T,F))
 
 # R0 for 0 and 1 matches --------------------------------------------------
 
@@ -1236,6 +1223,7 @@ standard_plot(
 )
 make_png(plt_R_pot_effect)
 make_svg(plt_R_pot_effect)
+
 
 
 # Plot -----------------------------------------------------------
