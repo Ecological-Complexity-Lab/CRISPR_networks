@@ -11,7 +11,7 @@ on_Midway <- function(){ifelse(Sys.getenv('USER')=='pilosofs',T,F)}
 # If run with an sbatch pipeline take arguments from there. Otherwise those specified here.
 if (length(commandArgs(trailingOnly=TRUE))==0) {
   # args <- c('mu5e-7_initialDiffDp1_S50P15_R-13997','5*10^-7','15',F, F)
-  args <- c('mu1e-7_initialDiffDp1_S10P15_R-0001','1*10^-7','15',F, T)
+  args <- c('mu1e-7_initialDiffDp1_S10P15_R-0002','1*10^-7','15',F, T)
 } else {
   args <- commandArgs(trailingOnly=TRUE)
 }
@@ -588,7 +588,7 @@ print('Generating networks...')
 all_networks <- vector(mode = 'list', length = length(hr_seq))
 for (hr in hr_seq){
   nets <- create_networks_hr(virus_data, bacteria_data, hr)
-  # print(nets$nodes %>% group_by(type) %>% count())
+  print(nets$nodes %>% group_by(type) %>% count())
   all_networks[[which(hr_seq==hr)]] <- nets
   notify(paste('Generated networks for time ',hr,'/',stop_time,sep=''))
 }
@@ -658,22 +658,9 @@ plt_richness <-
     ggplot(richness, aes(hr, n, color=node_type))+
       geom_line(size=1.5)+
       scale_color_manual(values = c('blue','brown', 'red'))+
-      theme(legend.position = 'none')+
       labs(y='Richness')
   )
 make_png(plt_richness)
-
-plt_bacteria_richness_abundace <- 
-  plot_grid(plt_bact_abund,
-            standard_plot(
-              ggplot(richness %>% filter(node_type=='bacteria'), aes(hr, n))+
-                geom_line(color='blue')+
-                theme(legend.position = 'none')+
-                labs(y='Bacteria richness')
-            ), nrow=2, align = 'vh')
-make_png(plt_bacteria_richness_abundace)
-make_svg(plt_bacteria_richness_abundace)
-
 
 
 # Phage and bacteria diversification ----------------------------------
