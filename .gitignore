@@ -1,7 +1,9 @@
 empirical_data_analysis_files/
+empirical_data_analysis_cache/
 host_spacer_simulation_files/
 host_spacer_simulation_cache/
 data/mu1e-7_initialDiffDp1_S10P15_R-0001/
+mu1e-7_initialDiffDp1_S10P15_R-0002/
 for0001.R
 .DS_Store
 data/.DS_Store

@@ -7,7 +7,7 @@ output: github_document
 
   
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE)
 knitr::opts_knit$set(root.dir = "/Users/Shai/GitHub/ecomplab/CRISPR_networks/")
 knitr:::read_chunk('/Users/Shai/GitHub/ecomplab/CRISPR_networks/empirical_data_analysis.R')
 ```
@@ -32,24 +32,15 @@ db <- dbConnect(SQLite(), dbname = '/Users/Shai/GitHub/ecomplab/CRISPR_networks/
 
 # Analysis
 
-We analyze the modular structure of host-spacer networks and the weighted-nested structure of immunity networks in three data sets: Yellowstone, Pseudomonas with virus cluster 3 and Russia 2010. In the figures below the rows correspond to these 3 data sets, respectively.
+We analyze the **weighted-nested structure of immunity networks** and the **modular structure of host-spacer networks** in three data sets: Yellowstone, Pseudomonas with virus cluster 3 and Russia 2010. In the figures below the rows correspond to these 3 data sets, respectively.
 
 ```{r Load analysis, echo=FALSE, include=FALSE, eval=TRUE}
 <<analysis>>
 ```
 
-## Host-spacr networks
-In host spacer networks we test for significance by shuffling the host-spacer network with an equiprobable algorithm. All the networks are significantly modular.
+## Immunity networks
 
-```{r plots host-spacer}
-plot_grid(Yellowstone$p1, Yellowstone$p2,
-          Pseudomonas$p1, Pseudomonas$p2,
-          Russia2010$p1, Russia2010$p2,
-          ncol=2, nrow=3, align = 'vh', labels = letters[1:6], label_size = 16, scale = 0.95)
-```
-
-## Host-spacr networks
-In immunity networks we test for significance by shuffling the values of interactions (model `r00_samp`). These are all significantly modular.
+In immunity networks we test for significance in nestedness by shuffling the values of interactions (model `r00_samp`). We find that all significantly modular.
 
 ```{r plots immunity}
 plot_grid(Yellowstone$p4, NULL,
@@ -58,7 +49,20 @@ plot_grid(Yellowstone$p4, NULL,
           ncol=2, nrow=3, align = 'vh', labels = c('a','',letters[2:5]), label_size = 16, scale = 0.95)
 ```
 
-# Phylogenetic analysis
+## Host-spacr networks
+
+In host spacer networks we test for significance in modularity by shuffling the host-spacer network with an equiprobable algorithm. We find that all the networks are significantly modular.
+
+```{r plots host-spacer}
+plot_grid(Yellowstone$p1, Yellowstone$p2,
+          Pseudomonas$p1, Pseudomonas$p2,
+          Russia2010$p1, Russia2010$p2,
+          ncol=2, nrow=3, align = 'vh', labels = letters[1:6], label_size = 16, scale = 0.95)
+```
+
+
+### Phylogenetic signal within modules
+
 We look for phylogenetic signal in the host-spacer network of the Russia 2010 data set. The tree:
 
 ```{r phylogenetic_analysis, echo=FALSE, include=FALSE, eval=TRUE, warning=FALSE, message=FALSE}
@@ -80,20 +84,9 @@ phylo_dist_signif$overlapping # Overlapping
 
 There are only `r length(phylo_dist_signif$overlapping)` overlapping strains out of `r length(phylo_dist_signif$nodes_in_modules)` in the network.
 
-## Phylogenetic distance
+First we calculate the mean phylogenetic distance between hosts within modules. Note that not all modules are represented. This is because some of the modules have a single strain (distance requires minimum 2), and because not all the strains in the original network are included due to low overlap with strains in the tree.
 
-First we calculate the mean phylogenetic distance between hosts within modules, and the mean of these distances. Note that not all modules are represented. This is because some of the modules have a single strain (distance requires minimum 2), and because not all the strains in the original network are included due to low overlap with strains in the tree.
-
-Now shuffle to create permuted modules of the same size and recalculate the mean PD within modules. The shuffling permutes the ID of the strains. The null hypothesis is that the permuted distance is smaller than the observed for each module (i.e., no signal). If we **reject** this hypothesis then there is phylogenetic signal because the observed PD beteween hosts within each module would be smaller than expected by chance (closely related hosts share a module). We see that if we consider the mean of mean PD across modules then we indeed reject this hypothesis, so there is a phylogenetic signal.
-
-### Across modules using mean of PD means
-```{r across_modules, echo=TRUE, include=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
-phylo_dist_signif$result_across_moduels
-phylo_dist_signif$plt_across_modules
-```
-
-### Within modules using mean PD
-But we can also test this per module. Here we obtain a distribution per module and estimate significane per module with or without Bonferroni correction (reducing the threshold for significance by dividing 0.05 by 5 modules).
+We then create permuted modules of the same size but with different host strains and recalculate the mean PD again within modules per permutation. The null hypothesis is that the permuted distance is smaller than the observed for each module (i.e., no signal). If we **reject** this hypothesis then there is phylogenetic signal because the observed PD beteween hosts within each module would be smaller than expected by chance (closely related hosts share a module). We obtain a distribution per module and estimate significane per module with Bonferroni correction (reducing the threshold for significance by dividing 0.05 by the number of modules).
 
 ```{r within_modules, echo=TRUE, include=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
 left_join(phylo_dist_signif$result_within_moduels, phylo_dist_signif$D_obs) %>% 
