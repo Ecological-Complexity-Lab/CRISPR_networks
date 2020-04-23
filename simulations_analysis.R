@@ -549,11 +549,12 @@ plt_bact_abund <-
     theme(legend.position = 'none')+
     geom_hline(yintercept = 10^5.5/10^5, linetype='dashed', size=0.4)
   )
-  
-# bacteria_abundance %>% ggplot(aes(x=Bdensity))+geom_density()
+make_png(plt_bact_abund)
+
+# Virus abundance
 dominant_strains <- phage_abundance %>% 
   group_by(label) %>% 
-  summarise(mean_abund=mean(Pdensity)) %>% 
+  summarise(mean_abund=mean(Pdensity)) %>%
   top_n(n=dom_strains_num, wt = mean_abund) %>% 
   arrange(label) %>% 
   mutate(dominant=T)
@@ -577,6 +578,7 @@ plt_virus_abund <-
   )
 
 plt_abundance_profiles <- plot_grid(plt_bact_abund, plt_virus_abund, nrow=2, align = 'vh')
+make_png(plt_virus_abund)
 
 make_png(plt_abundance_profiles)
 make_svg(plt_abundance_profiles)
@@ -723,6 +725,7 @@ make_svg(plt_bacteria_persistence)
 
 
 # Trees -------------------------------------------------------------------
+
 tree_data <- read_delim(paste(base_name,'_Phage-TREE.txt',sep=''), delim = '\t',col_names = c("Recordtime","id","parent_id","creation_time"))
 tree_data$id <- paste('V_',str_pad(tree_data$id, 4, 'left', '0'),sep='')
 tree_data$parent_id <- paste('V_',str_pad(tree_data$parent_id, 4, 'left', '0'),sep='')
