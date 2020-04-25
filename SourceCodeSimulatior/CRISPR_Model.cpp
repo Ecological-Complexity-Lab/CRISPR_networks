@@ -299,7 +299,7 @@ int main(int argc, const char * argv[]) {
     
     
     
-// ################################################################################################################################################################################ 
+//##################################################################################################################################################################### 
     
     
     // Start the simulation:
@@ -367,12 +367,11 @@ int main(int argc, const char * argv[]) {
                     infectionMatrix[i][j] = 1.0 - CRISPRImmuneFunction(Spacers[i], Protospacers[j], NumOfSpacers, NumOfProtospacers);
                 }
             }
-//              ##################################################################!!!!!!!!!!
             for(int i=0;i<Db;i++){
                 fileForBacteria << timesOfRecord << " " << time << " " << Blabel[i] << " " << Bold[i];
                 for(int j=0;j<NumOfSpacers;j++){
                     fileForBacteria << " " << Spacers[i][j];
-/                }
+               }
                 fileForBacteria << endl;
             }
             
