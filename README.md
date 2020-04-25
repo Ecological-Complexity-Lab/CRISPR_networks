@@ -10,13 +10,18 @@ The code C++ source code for the make the simulations based on the hybrid (deter
 
 ### Compilation
 
-You must compile de C++ code 
+The code is written for C++11 version. You must compile the code by using a proper C++11 compiler.
+For example
 
-´´´
-g++ -std=c++11 ChildsModel.cpp 
-´´´
+```
+g++ -std=c++11 CRISPR_Model.cpp -o CRISPRsimulator
+```
 
 ### Run
+
+```
+./CRISPRsimulator parameters
+```
 
 ### Analysis of the output files
 
