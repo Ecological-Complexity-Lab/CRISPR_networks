@@ -6,7 +6,19 @@ This repository accompanies the paper Pilosof S, Alcala-Corona SA, Wang T, Kim T
 
 ## Simulations based on the Childs et.al. model
 
-The code C++ source code for the make the simulations based on the hybrid (deterministic-stochastic) model by Childs et.al.can be found [here](). 
+The code C++ source code for the make the simulations based on the hybrid (deterministic-stochastic) model by Childs et.al.can be found [here](https://github.com/Ecological-Complexity-Lab/CRISPR_networks/blob/master/SourceCodeSimulatior/CRISPR_Model.cpp). 
+
+### Compilation
+
+You must compile de C++ code 
+
+´´´
+g++ -std=c++11 ChildsModel.cpp 
+´´´
+
+### Run
+
+### Analysis of the output files
 
 In this repository we include the output of this simulator as input data, and the R code necessary to analyze these data. The simulator produces files named `mu1e-7_initialDiffDp1_S10P15_R-NNNN`, where NNNN is the seed number of a particular simulation. We have included the stochastic simulation outputs for our main simulation example (seed number 12499) in the folder `data\mu1e-7_initialDiffDp1_S10P15_R-12499`.
 
