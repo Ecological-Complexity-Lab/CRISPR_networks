@@ -4,9 +4,11 @@ This repository accompanies the paper Pilosof S, Alcala-Corona SA, Wang T, Kim T
 
 # Simulated data
 
-## Stochastic simulations
+## Simulations based on the Childs et.al. model
 
-The code for the stochastic simulations can be found [here](). In this repository we include the output of this simulator as input data, and the R code necessary to analyze these data. The simulator produces files named `mu1e-7_initialDiffDp1_S10P15_R-NNNN`, where NNNN is the seed number of a particular simulation. We have included the stochastic simulation outputs for our main simulation example (seed number 12499) in the folder `data\mu1e-7_initialDiffDp1_S10P15_R-12499`.
+The code C++ source code for the make the simulations based on the hybrid (deterministic-stochastic) model by Childs et.al.can be found [here](). 
+
+In this repository we include the output of this simulator as input data, and the R code necessary to analyze these data. The simulator produces files named `mu1e-7_initialDiffDp1_S10P15_R-NNNN`, where NNNN is the seed number of a particular simulation. We have included the stochastic simulation outputs for our main simulation example (seed number 12499) in the folder `data\mu1e-7_initialDiffDp1_S10P15_R-12499`.
 
 * `Bacteria-abundance.txt`: The density of bacteria at different times.
 * `Phage-abundance.txt`: The density of viruses at different times.
@@ -16,7 +18,7 @@ The code for the stochastic simulations can be found [here](). In this repositor
 
 We also include a list with all the seeds for the 100 simulations we ran in file `seed_index.csv`. Running the simulator with these seeds will reproduce the exact data we use in the paper.
 
-## Analysis of stochastic simulations
+## Analysis of simulations
 
 Output of the stochastic simulations is the input of the file `simulations_analysis.R`. We also include the file `host_spacer_simulation.Rmd` for specific analysis of modularity and phylogenetic distance in host-spacer and infection networks.
 
