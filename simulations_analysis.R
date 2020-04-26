@@ -846,7 +846,9 @@ for (i in 1:nrow(VDRs)){
 }
 record_data(phylogenetic_signal_infection)
 
-
+# Create Table S1
+x=phylogenetic_signal_infection %>% select(VDR_ID=VDR, Module=m, Size=mod_size, Pvalue=pvalue, Significant=Signif)
+print(xtable(x, type = "latex"), file = "table_s1.tex", include.rownames = F)
 
 
 # Significance of modularity of host-spacer networks --------------------------------------
@@ -896,6 +898,9 @@ for (i in 1:nrow(VDRs)){
 }
 record_data(phylogenetic_signal_hs)
 
+# Create Table S2
+# x=phylogenetic_signal_hs %>% select(VDR_ID=VDR, Module=m, Size=mod_size, Pvalue=pvalue, Significant=Signif)
+# print(xtable(x, type = "latex"), file = "table_s2.tex", include.rownames = F)
 
 # WNODF -------------------------------------------------------------------
 
