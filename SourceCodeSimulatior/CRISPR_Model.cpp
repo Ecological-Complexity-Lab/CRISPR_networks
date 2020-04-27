@@ -649,7 +649,7 @@ int main(int argc, const char * argv[]) {
         }
         
         
-// ##############################################################  Evoultionary computation  ###########################################################################            
+// ##############################################################  Evolutionary computation  ###########################################################################            
         
         // Perform the evolution event only when the timeToEvolution is less than 1 hour:
         if(timeToEvolution<=1){
