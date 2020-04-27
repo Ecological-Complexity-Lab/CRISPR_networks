@@ -19,9 +19,34 @@ g++ -std=c++11 CRISPR_Model.cpp -o CRISPRsimulator
 
 ### Run
 
+Run the executable in the compiled code command line by using the next parameters:
+
+
+
+
 ```
-./CRISPRsimulator parameters
+./CRISPRsimulator Dp mu T Pts Sp Seed 
 ```
+Where:
+* `Dp`: is the initial number of phage strains. Usually is set to 1 virus strain.
+* `mu`: The prtospacer mutation rate per  of viruses at different times.
+* `Bacteria-TREE.txt`: Specifies the parents and children of bacteria. Converted to a nwk file in section `Trees` in file `simulations_analysis.R`.
+* `data-bact.txt`: Spacer composition of bacteria strains at each time.
+* `data-phage.txt`: Protospacer composition of virus strains at each time.
+
+For example:
+```
+./CRISPRsimulator 1 1e-7 5000 15 10 12499
+```
+
+You can also set the seed by using a random number from your Unix/Linux System, for diferet simulations for the same parametes.
+
+```
+./CRISPRsimulator 1 1e-7 5000 15 10 $RANDOM
+```
+
+See 
+Childs, L. M., et. al. "-[Multiscale model of CRISPR‐induced coevolutionary dynamics: diversification at the interface of Lamarck and Darwin." Evolution: International Journal of Organic Evolution 66, no. 7 (2012)]-(https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1558-5646.2012.01595.x).
 
 ### Analysis of the output files
 
