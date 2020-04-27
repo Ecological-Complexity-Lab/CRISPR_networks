@@ -7,7 +7,9 @@ This repository accompanies the paper Pilosof S, Alcala-Corona SA, Wang T, Kim T
 ## Simulations based on the Childs et. al. model
 
 Here we implement the hybrid (deterministic/stochastic) model by Lauren M. Childs, et. al. in *"Multiscale model of CRISPR‐induced coevolutionary dynamics: diversification at the interface of Lamarck and Darwin"*. [*Evolution: International Journal of Organic Evolution 66, no. 7 (2012)*](https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1558-5646.2012.01595.x).
-The code C++ source code for make the simulations based can be found [here](https://github.com/Ecological-Complexity-Lab/CRISPR_networks/blob/master/SourceCodeSimulatior/CRISPR_Model.cpp). 
+
+
+The C++ source code to make the simulations can be found [here](https://github.com/Ecological-Complexity-Lab/CRISPR_networks/blob/master/SourceCodeSimulatior/CRISPR_Model.cpp). 
 
 ### Compilation
 
