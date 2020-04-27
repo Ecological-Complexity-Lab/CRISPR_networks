@@ -115,3 +115,24 @@ Code is concentrated in file `empirical_data_analysis.R`. We also include `empir
 * **main**: A wrapper to read data, build and analyze immunity networks.
 
 The analysis of modularity is also performed with infomapecology.
+
+
+# Neutral model without explicit immunity
+
+Here we implement a mean-field simplification of the model which does not explicitly include the diversity of hosts and viruses. Instead, we consider the model as a Lotka-Volterra model whit all the host strains considered as one single prey, and all the viruses strains are collapsed in one single predator. The immunity is taken as an average value of the matrix M which is artificial.
+
+The Python code is just a simple ODE integrator of the LV mean-field simplified system, which uses different values of the average immunity matrix M.
+
+The code found [here](https://github.com/Ecological-Complexity-Lab/CRISPR_networks/blob/master/SourceCodeSimulatior/CRISPR_Model.cpp). 
+
+## Run
+
+```
+python MFDyn_AverageImmMatrix.py M1 M2 M3 M4
+```
+Where M<sub>i</sub> are the artificial average values of the matrix M.
+
+For example:
+```
+python MFDyn_AverageImmMatrix.py 0.35 0.7 0.85 0.9167
+```
