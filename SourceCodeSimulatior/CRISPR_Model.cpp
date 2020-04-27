@@ -18,9 +18,11 @@
 
 using namespace std;
 
-// ##########################################################################################################################
+
+
 // ########################################## PDI Functions  ################################################################
-// ##########################################################################################################################
+
+// The next functions are made for computing the Population Distributed Immunity proposed by Childs, et.al. on PloS one 9, no. 7 (2014).
 
 
 // This function returns the union of two sets (of ProtoSpacers and Spacers) to compute PDI.
@@ -114,13 +116,14 @@ double Sigma(int SpacerSet1[], int SpacerSet2[], int ProtospacerSet[], int NumOf
     
 }
 
-// ##########################################################################################################################
-// ##########################################################################################################################
+// ##################################################### Childs, et.al. Model #####################################################################
+
+
+// Implementation of the hybrid (deterministic/stochastic) model by  Childs, et.al. in  Evolution: International Journal of Organic Evolution 66, no. 7 (2012)
 
 
 
 // Set up an uniform distribution between 0 and 1 and fix the seed for the random generator:
-// std::mt19937 generator(1729);
 // std::uniform_real_distribution<double> distribution(0.0,1.0);
 
 // CRISPRImmuneFunction is the function checking whether oneSpacerSet[] and oneProtospacerSet[] shares elements:
@@ -130,43 +133,65 @@ int CRISPRImmuneFunction(int oneSpacerSet[],int oneProtospacerSet[], int NumOfSp
 int SpacerProtospacerOverlap(int oneSpacerSet[],int oneProtospacerSet[], int NumOfSpacers, int NumOfProtospacers);
 
 
-// int AllPAM_mutated(int oneProtospacerSet[], int NumOfProtospacers);  This not matters
-
 int main(int argc, const char * argv[]) {
     
-    int Seed = stoi(argv[6]);    // Here we collect the seed in order to run different stochastic simulations.
+    int Seed = stoi(argv[6]);    // Here we collect the seed for the command line in order to run different stochastic simulations.
  
     
     std::mt19937 generator(Seed);
     std::uniform_real_distribution<double> distribution(0.0,1.0);    
     
    
-    string stringSeed = to_string(Seed);
+    string stringSeed = to_string(Seed);  // String to identify the output files 
+    
+    
+    
+    
+    
     
     // Parameters (can be compared with Childs et.al. model. The names of those parameters should be self-explanatory):
     
-    double CRISPRfailure = 1.0e-5;           // CRISPR failure rate even if the bacteria have the resistance.  //p in Childs et.al. model
-    double SpacerAcquisition = 1.0e-5;       // Spacer acquisition rate per bacterium phage encounter.          //q in Childs et.al. model
+    
+    // Demographic/Ecological parameters ----------------------------
+    
     double carryingCapacity = 1e5*sqrt(10);   // Carrying capacity for the bacterial population.                // K in Childs et.al. model
     int burstSize = 50;                     // burst size for phages.                                           // beta in Childs et.al. model
     double adsorptionRate = 1.0e-7;          // adsorption rate.                                                // phi in Childs et.al. model
     double decayRate = 0.1;                 // decay rate for phages.                                           \\ m in Childs et.al. model
-    double MutationRate = 5e-7;             // mutation rate for phages per phage generation per protospacer.   \\ mu in thChilds et.al. model
-    string stringMutationRate = "5e-7";     // A string stringMutationRate only used for generated file name.
-    stringMutationRate = argv[2];
+    
+    
+    // Molecular parameters ----------------------------
+    
+    double CRISPRfailure = 1.0e-5;           // CRISPR failure rate even if the bacteria have the resistance.  //p in Childs et.al. model
+    double SpacerAcquisition = 1.0e-5;       // Spacer acquisition rate per bacterium phage encounter.          //q in Childs et.al. model
+    
+    
+    // Evolutionary parameters ----------------------------
+    
+    double densityCutoff = 0.1;      // densityCutoff is the lower bound below which a single bacterial strain and phage strain is considered to be extinct.  \\ Pc in model
+    
+    double MutationRate = 5e-7;             // Default mutation rate for phages per phage generation per protospacer.   \\ mu in Childs et.al. model
+    string stringMutationRate = "5e-7";     // A string only used for generating a output file name.
+    stringMutationRate = argv[2];           // We collect the value of MutationRate from the command line and overwrite the default value
     MutationRate = stod(stringMutationRate);
-    double densityCutoff = 0.1;            // densityCutoff is the lower bound below which a single bacterial strain and phage strain is considered to be extinct.  \\ \pho_c
+  
     
-    int NumOfProtospacers = 10;           // Number of protospacer.                                               
-    int NumOfSpacers = 8;                 // Number of spacers.
+    int NumOfProtospacers = 10;           // Default Number of Protospacers, provided by the model.                                     
+    int NumOfSpacers = 8;                 // Default Number of spacers, provided by the model.
     
-    string stringNumOfProtospacers = argv[4];
-    string stringNumOfSpacers = argv[5];
-    NumOfProtospacers = stoi(stringNumOfProtospacers);          // Number of protospacer.                                               
-    NumOfSpacers = stoi(stringNumOfSpacers);                 // Number of spacers.        
+    string stringNumOfProtospacers = argv[4];   // Here we collect the value of NumOfProtospacers from the command line and overwrite the default value
+    string stringNumOfSpacers = argv[5];        // Here we collect the value of NumOfSpacers from the command line and overwrite the default value
+    
+    NumOfProtospacers = stoi(stringNumOfProtospacers);          // A string with NumOfProtospacers used for generating a output file name.                                             
+    NumOfSpacers = stoi(stringNumOfSpacers);                 // A string with NumOfSpacers used for generating a output file name.   
+    
+    
+    
+    
     
     
     // Because the protospacers and spacers are written as numbers 0,1,2... So the newest mutation of a protospacer will simply generate a new number. LargestIntegerUsed is the largest number used in the protospacer sets.
+    
     int LargestIntegerUsed = NumOfProtospacers-1;
     double timeInterval = 1.0/100;          // time steps for calculating the ODEs in units of "hour".   // DT  for Euler
     double time = 0.0;                     // time is used to save the time in the coevolutionary simulation.  // Reord initial time
@@ -174,9 +199,15 @@ int main(int argc, const char * argv[]) {
     double nextTimeToWriteFile=0;         // nextTimeToWriteFile defines the next time to write information to the file. nextTimeToWriteFile is added a fixed time separation like 1hour to make sure the information is written to the file every 1 hour.
     
     
-    int runningTime=10000;                  // controlling the running time as hours for the simulation.      
-    string stringrunningTime = argv[3];
-    runningTime = stoi(stringrunningTime);
+    int runningTime=10000;                  // This variable controls the running time as hours for the simulation. 
+                                            // The default value is 10000 hrs, that could derive in a very long simulation depending on the other parameters
+                                                
+    string stringrunningTime = argv[3];     // Here we collect the value of runningTime from the command line and overwrite  for controlling the length pf the simulation
+    runningTime = stoi(stringrunningTime);  // runningTime needs to be an integer
+    
+    
+    // Initialization of the Evolutionary rates for the stochastic part  ----------------------------
+    
     double evolulationRate = 0.0;
     double BacteriaEvolutionRate = 0.0;    // total bacterial evolutionary rate.
     double PhageEvolutionRate = 0.0;       // total phage evolutionary rate.
@@ -186,8 +217,10 @@ int main(int argc, const char * argv[]) {
     double effDp;                         // effective diversity for phage denoted by 1/(\sum(p_i^2)) where p_i is the proportion of strains.
     
     
-    int Dp = 1;                           // Db is the number of phage strains existing. For a cold start, Dp = 1.
-    int Db = 1;                           // Db is the number of bacterial strains existing.
+    // Initialization of the number of host and virus strains  ----------------------------
+    
+    int Dp = 1;                           // Db is the number of phage strains existing. Default value, Dp = 1.
+    int Db = 1;                           // Db is the number of bacterial strains existing. Default value, Dp = 1.
     
 #define count 50000
     double* Bold = new double[count];         // Bold saves the bacterial abundance.   Number of Bacteria per millilitre
@@ -198,6 +231,14 @@ int main(int argc, const char * argv[]) {
     int* Plabel = new int[count];            // Plablel saves the labelling for phage strains.
     int BlabelLargest=0;                   // BlabelLargest saves the largest used labelling for bacterial strains.
     int PlabelLargest=0;                   // PlabelLargest saves the largest used labelling for phage strains.
+   
+    
+    double* SpacerAcquisitionRate = new double[count]; //SpacerAcquisitionRate is the calculated spacer acquisition rate for each bacterial strain.    
+    double* ProtospacerMutationRate = new double[count]; //ProtospacerMutationRate is the calculated mutation rate for each phage strain.   
+   
+   
+    // Initialization of the genomes of host and virus strains  ----------------------------
+   
    
     int** Spacers = new int*[count];         // Spacers save the spacer set for each corresponded bacterial strain.
     for(int i=0;i<count;i++){
@@ -210,26 +251,27 @@ int main(int argc, const char * argv[]) {
         Protospacers[i] = new int[NumOfProtospacers];
     }
     
-    double* SpacerAcquisitionRate = new double[count]; //SpacerAcquisitionRate is the calculated spacer acquisition rate for each bacterial strain.    
-    double* ProtospacerMutationRate = new double[count]; //ProtospacerMutationRate is the calculated mutation rate for each phage strain.
     
+   // Initialization of infection matrix base on genomes
     
     int** infectionMatrix = new int*[count];
     for(int i=0;i<count;i++){
-        infectionMatrix[i] = new int[count];      // infectionMatrix is the infection matrix/network between bacterial strains and phages. The entry of the matrix equals 1/0 if the phage strain can/cannot infect the bacterial strain.
+        infectionMatrix[i] = new int[count];      // infectionMatrix is the infection matrix/network between bacterial strains and phages. 
+                                                // The entry of the matrix equals 1/0 if the phage strain can/cannot infect the bacterial strain.
     }
     
    
     
-    // Initial conditions:
+    // Dynamical Initial conditions:
     time = 0.0;
     timesOfRecord = 1;
     nextTimeToWriteFile=0;
 
-    string stringDp = argv[1];          
-    Dp = stod(stringDp);
+
     
-    Db = 1;                             
+    // Setting Initial bacterial population.
+    
+    Db = 1;                             // One naive bacteria with no immunity at all
     for(int j=0;j<Db;j++){
         Bold[j] = 1e5;                // Assign the initial bacterial population.
         Blabel[j] = j+1;             // Assign a unique positive number to each strain.
@@ -238,6 +280,13 @@ int main(int argc, const char * argv[]) {
             Spacers[j][i] = -1;      // spacer set initially is set as [-1,-1,...,-1]/
         }
     }
+    
+    
+    // Setting Initial phage population.
+    
+    string stringDp = argv[1];         // We set the value of the the initial number of phage strains from the command line and overwrite the default value. Usually is 1 virus strain.   
+    Dp = stod(stringDp);    
+    
     for(int j=0;j<Dp;j++){
         Pold[j] = 1e5;               // Assign the initial phage population.
         Plabel[j] = j+1;            // Assign a unique positive number to each strain.
@@ -251,24 +300,31 @@ int main(int argc, const char * argv[]) {
     
     
     
-// #############################################################################################################################################################   
+// ######################################################  Writing output files  ###########################################################################################   
     
     
 // Write the file name: (You need to change the path according to your system.)
+
+
+// Main output files with the structural and dynamical information of the whole system
 
     
     ofstream fileForBacteria("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_data-bact"+".txt");     // data1 records data of population from 1000h to 2500h per 1h
     ofstream fileForPhage("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_data-phage"+".txt");
     ofstream fileForTimeSeriesData("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_time-series-data"+".txt");
-    ofstream fileForBacteriaAbundance("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_Bacteria-abundance"+".txt");
-    ofstream fileForBacteriaAnimation("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_Bacteria-animation"+".txt");
-    ofstream fileForPhageAbundance("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_Phage-abundance"+".txt");
-    ofstream fileForPhageAnimation("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_Phage-animation"+".txt");
     
-    ofstream fileForPhageTree("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_Phage-TREE"+".txt"); //   intento de Arbol!!!!!
-    ofstream fileForBacteriaTree("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_Bacteria-TREE"+".txt"); //   intento de Arbol!!!!!
+    
+// Output files related with abundances and richness of the system  
+    
+    ofstream fileForBacteriaAbundance("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_Bacteria-abundance"+".txt");    
+    ofstream fileForPhageAbundance("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_Phage-abundance"+".txt");
+    
+// Output files related with the phylogenetic trees of the system
+    
+    ofstream fileForPhageTree("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_Phage-TREE"+".txt");     ofstream fileForBacteriaTree("mu"+stringMutationRate+"_initialDiffDp"+stringDp+"_S"+to_string(NumOfSpacers)+"P"+to_string(NumOfProtospacers)+"_R-"+stringSeed+"_Bacteria-TREE"+".txt"); 
         
 
+// Setting and Initializing the output files  --------------------------------------------
     
     fileForBacteria << "timesOfRecord time label density";
     for(int i=0;i<NumOfSpacers;i++){
@@ -281,17 +337,17 @@ int main(int argc, const char * argv[]) {
         fileForPhage << " Protospacer" << to_string(i+1);
     }
     fileForPhage << endl;
-//     fileForTimeSeriesData << "timesOfRecord time Db Dp Bdensity Pdensity effDb effDp" << endl;
+
+
     fileForTimeSeriesData << "timesOfRecord time Db Dp Bdensity Pdensity effDb effDp PDI" << endl;
 
     fileForBacteriaAbundance << "timesOfRecord time label Bdensity ";// << endl;
     fileForBacteriaAbundance << "SpacersOccupied"  << endl;  // Aqui Agregue esta linea para cotar los spacers ocupados!!!!!!!
     
-    fileForBacteriaAnimation << "timesOfRecord time label Bdensity Bfit" << endl;
     fileForPhageAbundance << "timesOfRecord time label Pdensity" << endl;
-    fileForPhageAnimation << "timesOfRecord time label Pdensity Pfit" << endl;
     
-// Code for generate phylogeny tree files
+    
+// Initializing phylogeny tree files
 
     for(int j=0;j<Dp;j++){
         fileForPhageTree << timesOfRecord << "\t" << Plabel[j] << "\t" << "NA" << "\t" << time << endl;     
@@ -299,11 +355,11 @@ int main(int argc, const char * argv[]) {
     
     
     
-//##################################################################################################################################################################### 
+//############################################################ SIMULATION  ################################################################################################### 
     
     
     // Start the simulation:
-    while(time<runningTime){     // Continue the simulation when the time is less than the ruuningTime.
+    while(time<runningTime){     // Continue the simulation when the time is less than the runningTime.
         // Eliminate the strains below the densityCutoff (i.e. keep the strains above the densityCutoff):
         int tempDp = 0;
         int tempDb = 0;
@@ -312,7 +368,7 @@ int main(int argc, const char * argv[]) {
         
      
         
-        // ########### caulculation of Effective Diversity   ###############
+        // ########### computing of Effective Diversity   ###############
         
         for(int i=0;i<Db;i++){            
             sumOfBacteria = sumOfBacteria + Bold[i];
@@ -356,11 +412,15 @@ int main(int argc, const char * argv[]) {
         Db = tempDb;
         Dp = tempDp;
         
-        // ##################################################################
+
+// ###################################################  Setting information after evolutionary events #################################3
         
+        
+// Writing information --------
         
         // Write the information out when time is larger than nextTimeToWriteFile. nextTimeToWriteFile is added by 1 hour each time. So the information is written out every 1 hour.
         if(time > nextTimeToWriteFile){
+            
             // Calculate the infection_matrix:
             for(int i=0;i<Db;i++){
                 for(int j=0;j<Dp;j++){
@@ -385,15 +445,16 @@ int main(int argc, const char * argv[]) {
             }
             
 
-
+// ############# Setting abundance information after evolutionary event ##########################
 
             double Ni = 0;       
             double Nj = 0;       
             double Vk = 0; 
-            double PDI = 0;     
             double Nmax=0;
             double sumOfBacteria2 = 0;
             double sumOfPhage2 = 0;
+            
+            double PDI = 0;               
 
             
             for(int i=0;i<Db;i++){
@@ -419,53 +480,41 @@ int main(int argc, const char * argv[]) {
                         Vk = Pold[k]/sumOfPhage2;
                         
 
-//   ################### PDI computation  #########################                       
+//   PDI computation  ---------------------------------------     
+                        
+                        
                         
                         if (Blabel[i] != Blabel[j]) {
 
                             double S = Sigma(Spacers[i],Spacers[j], Protospacers[k], NumOfSpacers, NumOfProtospacers);
                             PDI = PDI + (1-((Ni-Nj)/Nmax))*S*(Ni*Nj*Vk);
                             
-                        }                        
+                        }     
+//  ----------------------------------------------------     
+
                     }                    
                 }                
             }
             
-            fileForTimeSeriesData << timesOfRecord << " " << time << " " << Db << " " << Dp << " " << sumOfBacteria2 << " " << sumOfPhage2 << " " << effDb << " " << effDp << " " << PDI <<  endl;
+        fileForTimeSeriesData << timesOfRecord << " " << time << " " << Db << " " << Dp << " " << sumOfBacteria2 << " " << sumOfPhage2 << " " << effDb << " " << effDp << " " << PDI <<  endl;
             
-
+            
+            
             for(int i=0;i<Db;i++){  // Abundant bacteria population
                 int tmpSPcounter = 0; // number of used spacers
                 for(int j=0;j<NumOfSpacers;j++){
-                    if (Spacers[i][j] != -1) {tmpSPcounter++;} // Aqui Agregue esta linea para cotar los spacers ocupados!!!!!!!
+                    if (Spacers[i][j] != -1) {tmpSPcounter++;}
                 }                    
                     
                     fileForBacteriaAbundance << timesOfRecord << " " << time << " " << Blabel[i] << " " << Bold[i] << " " << tmpSPcounter << endl;
             }
             
             
-            double Bfit;
-            for(int i=0;i<Db;i++){  // bacteria animation
-                Bfit = 0;
-                for(int j=0;j<Dp;j++){
-                    Bfit = Bfit + (1.0 - infectionMatrix[i][j]) * Pold[j]/sumOfPhage;
-                }
-                fileForBacteriaAnimation << timesOfRecord << " " << time << " " << Blabel[i] << " " << Bold[i] << " " << Bfit << endl;
-            }
-            
-       
             for(int i=0;i<Dp;i++){  // Abundant phage population
                     fileForPhageAbundance << timesOfRecord << " " << time << " " << Plabel[i] << " " << Pold[i] << endl;
               
             }
-            double Pfit;
-            for(int i=0;i<Dp;i++){  // phage animation
-                Pfit = 0;
-                for(int j=0;j<Db;j++){
-                    Pfit = Pfit + infectionMatrix[j][i] * Bold[j]/sumOfBacteria;
-                }
-                fileForPhageAnimation << timesOfRecord << " " << time << " " << Plabel[i] << " " << Pold[i] << " " << Pfit << endl;
-            }
+            
             
             timesOfRecord = timesOfRecord+1;
             nextTimeToWriteFile = nextTimeToWriteFile + 1.0;
@@ -506,10 +555,14 @@ int main(int argc, const char * argv[]) {
             evolulationRate = evolulationRate + ProtospacerMutationRate[i];
             PhageEvolutionRate = PhageEvolutionRate + ProtospacerMutationRate[i];
         }
+        
+        
         // Use Gillespie algorithm to calculate the time to the next evolutionary event:
         double timeToEvolution = -(1.0/evolulationRate) * log(distribution(generator));
 
-// #########################################################################################################################################     
+        
+        
+// ##############################################################  ODE Integraion ###########################################################################     
         
         // Calculate the ODEs before the evolution:
         sumOfBacteria = 0.0;
@@ -596,6 +649,8 @@ int main(int argc, const char * argv[]) {
         }
         
         
+// ##############################################################  Evoultionary computation  ###########################################################################            
+        
         // Perform the evolution event only when the timeToEvolution is less than 1 hour:
         if(timeToEvolution<=1){
             double randomNumber = distribution(generator);
@@ -618,7 +673,7 @@ int main(int argc, const char * argv[]) {
                             if(cumulative2>randomNumber2){
                                 int whichProtospacerToChoose = floor(distribution(generator)*NumOfProtospacers); // whichProtospacerToChoose determines which protospacer from the phage strain to choose as the newly acquired spacer.
                                 for(int k=1;k<NumOfSpacers;k++){
-                                    Spacers[Db][k] = Spacers[i][k-1];  // <<<---------
+                                    Spacers[Db][k] = Spacers[i][k-1];  
                                 }
                                 Spacers[Db][0] = Protospacers[j][whichProtospacerToChoose];
                                 // Check if this evolved bacterium strain already existed:
@@ -689,14 +744,14 @@ int main(int argc, const char * argv[]) {
     }
     
     
+    
+    // Closing output files 
+    
     fileForBacteria.close();
     fileForPhage.close();
     fileForTimeSeriesData.close();
     fileForBacteriaAbundance.close();
-    fileForBacteriaAnimation.close();
-    fileForPhageAbundance.close();
-    fileForPhageAnimation.close();
-    
+    fileForPhageAbundance.close();    
     fileForPhageTree.close();
     
     return 0;
@@ -704,11 +759,15 @@ int main(int argc, const char * argv[]) {
     
 }
 
+// #########################################################################################################################################################################
+// #########################################################################################################################################################################
 
-// ################################################################################################################################################################################
+
+// ############################################################ ADDITIONAL FUNCTIONS  #######################################################################################
 
 // CRISPRImmuneFunction is the function checking whether oneSpacerSet[] and oneProtospacerSet[] shares elements:
 // CRISPRImmuneFunction compares protospacers with spacers to check if they are matched or not and return 1 for TRUE and 0 as FALSE:
+
 int CRISPRImmuneFunction(int oneSpacerSet[],int oneProtospacerSet[], int NumOfSpacers, int NumOfProtospacers){
     for(int i=0;i<NumOfSpacers;i++){
         for(int j=0;j<NumOfProtospacers;j++){
