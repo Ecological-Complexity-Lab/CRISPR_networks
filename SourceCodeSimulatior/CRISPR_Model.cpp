@@ -342,7 +342,7 @@ int main(int argc, const char * argv[]) {
     fileForTimeSeriesData << "timesOfRecord time Db Dp Bdensity Pdensity effDb effDp PDI" << endl;
 
     fileForBacteriaAbundance << "timesOfRecord time label Bdensity ";// << endl;
-    fileForBacteriaAbundance << "SpacersOccupied"  << endl;  // Aqui Agregue esta linea para cotar los spacers ocupados!!!!!!!
+    fileForBacteriaAbundance << "SpacersOccupied"  << endl;  
     
     fileForPhageAbundance << "timesOfRecord time label Pdensity" << endl;
     
@@ -724,7 +724,7 @@ int main(int argc, const char * argv[]) {
                         for(int j=0;j<NumOfProtospacers;j++){
                             Protospacers[Dp][j] = Protospacers[i][j];
                         }
-//                         cout << timesOfRecord << " " << time << " " << Plabel[i] << " " << endl;  // Intento de Arbol!!!!!
+
                         int whichProtospacerToMutate = floor(distribution(generator)*NumOfProtospacers);
                         Protospacers[Dp][whichProtospacerToMutate] = LargestIntegerUsed + 1;
                         Pold[Dp] = 1.1 * densityCutoff;
