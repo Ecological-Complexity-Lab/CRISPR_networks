@@ -4,9 +4,16 @@ This repository accompanies the paper Pilosof S, Alcala-Corona SA, Wang T, Kim T
 
 # Simulated data
 
-## Simulations based on the Childs et.al. model
+## Simulations based on the Childs et. al. model
 
-The code C++ source code for the make the simulations based on the hybrid (deterministic-stochastic) model by Childs et.al.can be found [here](https://github.com/Ecological-Complexity-Lab/CRISPR_networks/blob/master/SourceCodeSimulatior/CRISPR_Model.cpp). 
+Here we implement the hybrid (deterministic/stochastic) model by  Childs, et.al. in "-[Multiscale model of CRISPR‐induced coevolutionary dynamics: diversification at the interface of Lamarck and Darwin." Evolution: International Journal of Organic Evolution 66, no. 7 (2012)]-(https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1558-5646.2012.01595.x).
+
+The code C++ source code for the make the simulations based on the hybrid (deterministic-stochastic) model by Childs et.al.
+
+
+
+
+can be found [here](https://github.com/Ecological-Complexity-Lab/CRISPR_networks/blob/master/SourceCodeSimulatior/CRISPR_Model.cpp). 
 
 ### Compilation
 
@@ -25,14 +32,15 @@ Run the executable in the compiled code command line by using the next parameter
 
 
 ```
-./CRISPRsimulator Dp mu T Pts Sp Seed 
+./CRISPRsimulator Dp mu runT Pts Sp seed 
 ```
 Where:
 * `Dp`: is the initial number of phage strains. Usually is set to 1 virus strain.
 * `mu`: The prtospacer mutation rate per  of viruses at different times.
-* `Bacteria-TREE.txt`: Specifies the parents and children of bacteria. Converted to a nwk file in section `Trees` in file `simulations_analysis.R`.
-* `data-bact.txt`: Spacer composition of bacteria strains at each time.
-* `data-phage.txt`: Protospacer composition of virus strains at each time.
+* `runT`: Specifies the running time as hours for the simulation.
+* `Pts`: Specifies the Number of Protospacers for the virus strains.
+* `Sp`: Specifies the Number of Spacers for the host strains.
+* `seed`: Set the seed for the random generator used for the stochastic part.
 
 For example:
 ```
@@ -45,8 +53,7 @@ You can also set the seed by using a random number from your Unix/Linux System, 
 ./CRISPRsimulator 1 1e-7 5000 15 10 $RANDOM
 ```
 
-See 
-Childs, L. M., et. al. "-[Multiscale model of CRISPR‐induced coevolutionary dynamics: diversification at the interface of Lamarck and Darwin." Evolution: International Journal of Organic Evolution 66, no. 7 (2012)]-(https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1558-5646.2012.01595.x).
+
 
 ### Analysis of the output files
 
