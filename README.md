@@ -123,7 +123,7 @@ Here we implement a mean-field simplification of the model which does not explic
 
 The Python code is just a simple ODE integrator of the LV mean-field simplified system, which uses different values of the average immunity matrix M.
 
-The code found [here](https://github.com/Ecological-Complexity-Lab/CRISPR_networks/blob/master/SourceCodeSimulatior/CRISPR_Model.cpp). 
+The code found [here](https://github.com/Ecological-Complexity-Lab/CRISPR_networks/blob/master/MeanField-NeutralDynamics/MFDyn_AverageImmMatrix.py). 
 
 ## Run
 
