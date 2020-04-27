@@ -6,14 +6,13 @@ This repository accompanies the paper Pilosof S, Alcala-Corona SA, Wang T, Kim T
 
 ## Simulations based on the Childs et. al. model
 
-Here we implement the hybrid (deterministic/stochastic) model by Lauren M. Childs, et. al. in ["*Multiscale model of CRISPR‐induced coevolutionary dynamics: diversification at the interface of Lamarck and Darwin." Evolution: International Journal of Organic Evolution 66, no. 7 (2012)*](https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1558-5646.2012.01595.x).
+Here we implement the hybrid (deterministic/stochastic) model by Lauren M. Childs, et. al. in "*Multiscale model of CRISPR‐induced coevolutionary dynamics: diversification at the interface of Lamarck and Darwin." [Evolution: International Journal of Organic Evolution 66, no. 7 (2012)*](https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1558-5646.2012.01595.x).
 The code C++ source code for make the simulations based can be found [here](https://github.com/Ecological-Complexity-Lab/CRISPR_networks/blob/master/SourceCodeSimulatior/CRISPR_Model.cpp). 
 
 ### Compilation
 
-The code is written for C++11 version. You must compile the code by using a proper C++11 compiler.
-For example
-
+The code is written for C++11 version. You must compile the code in the command line by using a proper C++11 compiler.
+For example:
 ```
 g++ -std=c++11 CRISPR_Model.cpp -o CRISPRsimulator
 ```
@@ -21,10 +20,6 @@ g++ -std=c++11 CRISPR_Model.cpp -o CRISPRsimulator
 ### Run
 
 Run the executable in the compiled code command line by using the next parameters:
-
-
-
-
 ```
 ./CRISPRsimulator Dp mu runT Pts Sp seed 
 ```
@@ -41,13 +36,17 @@ For example:
 ./CRISPRsimulator 1 1e-7 5000 15 10 12499
 ```
 
-You can also set the seed by using a random number from your Unix/Linux System, for diferet simulations for the same parametes.
+See [here](https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1558-5646.2012.01595.x), for more details about the description of the parameters. 
 
+
+You can also set the seed by using a random number from your Unix/Linux System, for diferet simulations for the same parametes.
 ```
 ./CRISPRsimulator 1 1e-7 5000 15 10 $RANDOM
 ```
 
+#### Output files
 
+Once the code has finished it will generate 7 output files, which will be ready for analysis which is detailed below.
 
 ### Analysis of the output files
 
