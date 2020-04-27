@@ -38,7 +38,7 @@ For example:
 ./CRISPRsimulator 1 1e-7 5000 15 10 12499
 ```
 
-See [here](https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1558-5646.2012.01595.x), for more details about the description of the parameters. 
+See [here](https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1558-5646.2012.01595.x) for more details about the description of the parameters. 
 
 
 You can also set the seed of simulation, using a random number generated from your Unix/Linux System. This is for running different simulations with the same parameters.
