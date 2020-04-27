@@ -11,7 +11,7 @@ The code C++ source code for make the simulations based can be found [here](http
 
 ### Compilation
 
-The code is written for C++11 version. You must compile the code in the command line by using a proper C++11 compiler.
+The code is written in C++ (version 11). You must compile the code in your command line by using a proper C++11 compiler.
 For example:
 ```
 g++ -std=c++11 CRISPR_Model.cpp -o CRISPRsimulator
@@ -19,15 +19,15 @@ g++ -std=c++11 CRISPR_Model.cpp -o CRISPRsimulator
 
 ### Run
 
-Run the executable in the compiled code command line by using the next parameters:
+Run the executable compiled code in the command line, using the next parameters:
 ```
 ./CRISPRsimulator Dp mu runT Pts Sp seed 
 ```
 Where:
 * `Dp`: is the initial number of phage strains. Usually is set to 1 virus strain.
-* `mu`: The prtospacer mutation rate per  of viruses at different times.
-* `runT`: Specifies the running time as hours for the simulation.
-* `Pts`: Specifies the Number of Protospacers for the virus strains.
+* `mu`: The prtospacer mutation rate per protospacer.
+* `runT`: Specifies the running time-length as hours for the simulation. This is the maximum length of each simulation. The execution time will be different as the other parameters are varied. 
+* `Pts`: the Number of Protospacers for the virus strains.
 * `Sp`: Specifies the Number of Spacers for the host strains.
 * `seed`: Set the seed for the random generator used for the stochastic part.
 
@@ -39,7 +39,7 @@ For example:
 See [here](https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1558-5646.2012.01595.x), for more details about the description of the parameters. 
 
 
-You can also set the seed by using a random number from your Unix/Linux System, for diferet simulations for the same parametes.
+You can also set the seed of simulation, using a random number generated from your Unix/Linux System. This is for running different simulations with the same parameters.
 ```
 ./CRISPRsimulator 1 1e-7 5000 15 10 $RANDOM
 ```
