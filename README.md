@@ -1,6 +1,6 @@
 # UNDER DEVELOPMENT!!
 
-This repository accompanies the paper Pilosof S, Alcala-Corona SA, Wang T, Kim T, Maslov S. The network structure and eco-evolutionary dynamics of CRISPR-induced immune diversification. bioRxiv. 2020. Available: <https://www.biorxiv.org/content/10.1101/850800v1.abstract>. It contains the code and data for the simulation and empirical analysis included in the paper.
+This repository accompanies the paper Pilosof S, Alcalá-Corona SA, Wang T, Kim T, Maslov S. The network structure and eco-evolutionary dynamics of CRISPR-induced immune diversification. bioRxiv. 2020. Available: <https://www.biorxiv.org/content/10.1101/850800v1.abstract>. It contains the code and data for the simulation and empirical analysis included in the paper.
 
 # Simulated data
 
