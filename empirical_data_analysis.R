@@ -268,10 +268,7 @@ test_PD_modules<- function(tree, module_object, node_start_letter){
 
 main <- function(dataset_id, nsim=10, font_size=20){
   # Get data
-  
-  # The criteria for matches matters A LOT !!!
-  # criterium <- '0mm/-PAM'
-  # criterium <- '4mm/-PAM'
+
   criterium <- '4mm/-PAM'
   
   as_tibble(dbGetQuery(db, paste('SELECT name FROM data_sets WHERE id=',dataset_id,sep='')))
