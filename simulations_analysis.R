@@ -1087,8 +1087,8 @@ record_data(R_0m_df)
 plt_R0m <- 
 standard_plot(
   R_0m_df %>% group_by(hr) %>%
-    summarise(R_0m_mean=mean(R_0m),
-              R_0m_mean_w=sum(R_0m_w_j),# Need to SUM the R_0m_w across viruses because this gives the weighted average for the population
+    summarise(R_0m_mean=mean(R_0m), # Mean across viruses
+              R_0m_mean_w=sum(R_0m_w_j),# Weighted mean across viruses: Need to SUM the R_0m_w across viruses because this gives the weighted average for the population
               R_0m_max=max(R_0m)) %>% 
     gather(key='variable', value='value', -hr) %>% 
     ggplot(aes(hr, value))+
@@ -1100,56 +1100,61 @@ standard_plot(
 make_png(plt_R0m)
 make_svg(plt_R0m)
 
-R_1m_df <- NULL
+R_pot_df <- NULL
 for (hr in hr_seq){
   x <- all_networks[[which(hr_seq==hr)]]
   imm <- x$immunity_matrix
   if (!1%in%imm){print('No 1-matches in immunity matrix, skipping');next}
   
-  # Prepare a matrix for R_1m
-  R_1m <- imm
-  R_1m[,] <- 0
-  bact <- rownames(imm)
-  bact_abund <- x$bacteria_abund_hr %>% filter(B_ID%in%bact)
-  
+  # Calculate constant prefactors
   N_T <- sum(x$bacteria_abund_hr$density) # Total bacteria abundance
   Z <- (beta*phi*(1-q))/(phi*N_T+m)
   
-  # Get only the 1-matches
-  idx <- which(imm==1,arr.ind = T) 
-  for (r in 1:nrow(idx)){
-    i <- idx[r,1]
-    j <- idx[r,2]
-    bact <- rownames(imm)[i]
-    virus <- colnames(imm)[j]
-    N_i <- subset(bact_abund, B_ID==bact)$density
-    R_1m[i,j] <- Z*N_i/protospacer_len # Need to divide by the length of the protospacer cassette because an escape mutation must hit the right protospacer
+  
+  # Only take the 1 matches
+  imm[imm>1] <- 0
+  # Bacteria abundance
+  bact <- rownames(imm)
+  bact_abund <- x$bacteria_abund_hr %>% filter(B_ID%in%bact)
+  
+  # Loop on all viruses
+  viruses <- colnames(imm)
+  R_pot_hr <- NULL
+  for (j in viruses){
+    k_j <- sum(imm[,j])
+    # Sum over N_i
+    sum_over_i <- 0
+    for (i in bact){
+      if(imm[i,j]==1){
+        N_i <- subset(bact_abund, B_ID==i)$density
+        sum_over_i <- sum_over_i+N_i
+      }
+    }
+    R_pot_j <- Z*(1/k_j)*sum_over_i
+    R_pot_hr <- rbind(R_pot_hr, tibble(hr=hr, V_ID=j, R_pot_j=R_pot_j))
   }
-
-  # Sum across bacteria to get the R_1m of a virus
-  tmp <- data.frame(hr=hr, V_ID=names(colSums(R_1m)), R_1m=colSums(R_1m), stringsAsFactors = F)
   
   # Weigh R_1m by relative virus abundance
-  virus_abund <- x$virus_abund_hr %>% filter(V_ID%in%tmp$V_ID)
+  virus_abund <- x$virus_abund_hr %>% filter(V_ID%in%R_pot_hr$V_ID)
   virus_abund$rel_density <- virus_abund$density/sum(virus_abund$density)
-  suppressMessages(tmp %<>%
+  suppressMessages(R_pot_hr %<>%
                      left_join(virus_abund) %>%
-                     mutate(R_1m_w_j=R_1m*rel_density))
+                     mutate(R_pot_j_w=R_pot_j*rel_density))
   
-  R_1m_df <- rbind(R_1m_df, as_tibble(tmp))
+  R_pot_df <- rbind(R_pot_df, R_pot_hr)
 
-  notify(paste('Calculated R_1m for time',hr))
+  notify(paste('Calculated R_pot for time',hr))
 }
 
-record_data(R_1m_df)
+record_data(R_pot_df)
 
-# plot population measures of R_1m
-plt_R1m <- 
+# plot population measures of R_pot
+plt_R_pot <- 
   standard_plot(
-    R_1m_df %>% group_by(hr) %>%
-      summarise(R_1m_mean=mean(R_1m),
-                R_1m_mean_w=sum(R_1m_w_j),# Need to SUM the R_0m_w across viruses because this gives the weighted average for the population
-                R_1m_max=max(R_1m)) %>% 
+    R_pot_df %>% group_by(hr) %>%
+      summarise(R_pot_mean=mean(R_pot_j), # Mean across viruses
+                R_1m_mean_w=sum(R_pot_j_w),# Weighted mean across viruses: need to SUM the R_0m_w across viruses because this gives the weighted average for the population
+                R_1m_max=max(R_pot_j)) %>% 
       gather(key='variable', value='value', -hr) %>% 
       ggplot(aes(hr, value))+
       geom_line(color='#F066D8')+
@@ -1158,63 +1163,65 @@ plt_R1m <-
       labs(title = 'Virus population measures for R with 1 matches')
   )
 
-make_png(plt_R1m)
-make_svg(plt_R1m)
+make_png(plt_R_pot)
+make_svg(plt_R_pot)
 
 
 # Calculate the R_potential
-R_pot_df <-
+R_escape_df <-
   # Need to join 0-matches with 1-matches to sum them
-  full_join(R_0m_df,R_1m_df,by=c('hr','V_ID')) %>% 
+  full_join(R_0m_df,R_pot_df,by=c('hr','V_ID')) %>% 
   # Convert NAs resulting from the join to 0s
   mutate(R_0m=ifelse(is.na(R_0m),0,R_0m),
-         R_1m=ifelse(is.na(R_1m),0,R_1m),
+         R_pot_j=ifelse(is.na(R_pot_j),0,R_pot_j),
          R_0m_w_j=ifelse(is.na(R_0m_w_j),0,R_0m_w_j),
-         R_1m_w_j=ifelse(is.na(R_1m_w_j),0,R_1m_w_j)) %>% 
+         R_pot_j_w=ifelse(is.na(R_pot_j_w),0,R_pot_j_w)) %>% 
   # Remove variables that are now replicated
   mutate(density=ifelse(is.na(density.x), density.y, density.x)) %>% 
   mutate(rel_density=ifelse(is.na(rel_density.x), rel_density.y, rel_density.x)) %>% 
   # Select and organize the columns
   select(-density.x, -density.y, -rel_density.x, -rel_density.y) %>% 
-  select("hr","V_ID","density","rel_density","R_0m","R_0m_w_j","R_1m","R_1m_w_j") %>% 
+  select(hr,V_ID,density,rel_density,everything()) %>% 
   # Caclulate R_pot and weighted R_pot
-  mutate(Rpot=R_0m+R_1m,
-         Rpot_w_j=R_0m_w_j+R_1m_w_j)
+  mutate(Rescape=R_0m+R_pot_j,
+         Rescape_w_j=R_0m_w_j+R_pot_j_w)
 
-record_data(R_pot_df)
+record_data(R_escape_df)
 
-plt_R_pot <- 
+plt_R_escape <- 
 standard_plot(
-  R_pot_df %>% group_by(hr) %>%
-    summarise(R_pot_mean=mean(Rpot),
-              R_pot_mean_w=sum(Rpot_w_j),# Need to SUM the R_0m_w across viruses because this gives the weighted average for the population
-              R_pot_max=max(Rpot)) %>% 
+  R_escape_df %>% group_by(hr) %>%
+    summarise(R_escape_mean=mean(Rescape),
+              R_escape_mean_w=sum(Rescape_w_j),# Need to SUM the R_0m_w across viruses because this gives the weighted average for the population
+              R_escape_max=max(Rescape)) %>% 
     gather(key='variable', value='value', -hr) %>% 
     ggplot(aes(hr, value))+
     geom_line()+
     facet_grid(variable~., scales = 'free_y')+
     geom_hline(yintercept = 1, linetype='dashed', color='gray50')+
-    labs(title = 'Virus population measures for R_pot')
+    labs(title = 'Virus population measures for R_escape')
 )
 make_png(plt_R_pot)
 make_svg(plt_R_pot)
 
 
 # Plot areas where an escape mutation can lead to Rpot>1
-R_pot_summary <- 
-  R_pot_df %>% group_by(hr) %>% 
+R_escape_summary <- 
+  R_escape_df %>% group_by(hr) %>% 
   summarise(R_0m_mean_w=sum(R_0m_w_j),
-            R_1m_mean_w=sum(R_1m_w_j),
-            R_pot_mean_w=sum(Rpot_w_j)) 
-plt_R_pot_effect <- 
+            R_pot_mean_w=sum(R_pot_j_w),
+            R_escape_mean_w=sum(Rescape_w_j)) %>% 
+  mutate(escape_point=ifelse(R_0m_mean_w<1 & R_escape_mean_w>1,T,F))
+  
+plt_R_escape_effect <- 
 standard_plot(
   ggplot()+
     geom_hline(yintercept = 1, linetype='dashed', color='gray50')+
-    geom_line(data=R_pot_summary, aes(hr,R_0m_mean_w),color='#8ACAFE')+
-    geom_line(data=R_pot_summary, aes(hr,R_1m_mean_w),color='#F066D8')+
-    geom_point(data=R_pot_summary %>% group_by(hr) %>% filter(R_0m_mean_w<=1, R_pot_mean_w>1, hr%in%BDR_hrs),
-               aes(hr,R_pot_mean_w),color='red')+
-    labs(y='Value of R0 (weighted means)', title='Times when R_pot>1 in BDRs, potentially causing an escape')
+    geom_line(data=R_escape_summary, aes(hr,R_0m_mean_w),color='#8ACAFE')+
+    geom_line(data=R_escape_summary, aes(hr,R_pot_mean_w),color='#F066D8')+
+    geom_point(data=R_escape_summary %>% filter(escape_point==T), aes(hr,R_escape_mean_w),color='red')+
+    scale_y_continuous(limits = c(0,5))+
+    labs(y='Value of R0 (weighted means)', title='Times when R_escape>1 in HCRs')
 )
 make_png(plt_R_pot_effect)
 make_svg(plt_R_pot_effect)
