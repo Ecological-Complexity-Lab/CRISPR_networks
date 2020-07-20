@@ -1033,12 +1033,12 @@ make_svg(plt_extinction_rank)
 
 # R0 for 0 and 1 matches --------------------------------------------------
 
-# R0 (whether for 0 or 1 matches) is calculated per bacteria-virus pair because
-# it is the growth rate of a virus strain in a bacteria strain. To obtain the R0
+# R_ij (whether for 0 or 1 matches) is calculated per bacteria-virus pair because
+# it is the growth rate of a virus strain j in a bacteria strain i. To obtain the R0
 # of a virus, R0_j, R0_ij needs to be summed across bacteria. R_0m is calcualted
 # for interactions with 0-matches (where viruses can grow). R_1m is calcualted
-# for interactions with 1-matches, and represents the potential addition to R0
-# if a virus escaped a bacteria.
+# for interactions with 1-matches, and represents the addition to R0
+# given that a virus escaped a bacteria.
 
 notify('--> Calculate R0 for 0 and 1 matches...')
 R_0m_df <- NULL
@@ -1080,7 +1080,6 @@ for (hr in hr_seq){
 
   notify(paste('Calculated R_0m for time',hr))
 }
-
 record_data(R_0m_df)
 
 # plot population measures of R_0m
@@ -1100,7 +1099,7 @@ standard_plot(
 make_png(plt_R0m)
 make_svg(plt_R0m)
 
-R_pot_df <- NULL
+R_1_df <- NULL
 for (hr in hr_seq){
   x <- all_networks[[which(hr_seq==hr)]]
   imm <- x$immunity_matrix
@@ -1110,51 +1109,46 @@ for (hr in hr_seq){
   N_T <- sum(x$bacteria_abund_hr$density) # Total bacteria abundance
   Z <- (beta*phi*(1-q))/(phi*N_T+m)
   
-  
   # Only take the 1 matches
   imm[imm>1] <- 0
-  # Bacteria abundance
-  bact <- rownames(imm)
-  bact_abund <- x$bacteria_abund_hr %>% filter(B_ID%in%bact)
-  
+
   # Loop on all viruses
   viruses <- colnames(imm)
-  R_pot_hr <- NULL
+  R_1_hr <- NULL
   for (j in viruses){
-    k_j <- sum(imm[,j])
-    # Sum over N_i
-    sum_over_i <- 0
-    for (i in bact){
-      if(imm[i,j]==1){
-        N_i <- subset(bact_abund, B_ID==i)$density
-        sum_over_i <- sum_over_i+N_i
-      }
-    }
-    R_pot_j <- Z*(1/k_j)*sum_over_i
-    R_pot_hr <- rbind(R_pot_hr, tibble(hr=hr, V_ID=j, R_pot_j=R_pot_j))
+    # Get the bacteria to which the virus has a 1-match
+    bact <- names(which(imm[,j]==1))
+    sum_N_i <- sum(subset(x$bacteria_abund_hr, B_ID%in%bact)$density)
+    # Get the number of protospacers of virus j that have a 1-match
+    G_j <- x$virus_ps_list %>% filter(V_ID==j) # All protospacers of virus j
+    S_i <- x$bacteria_sp_list %>% filter(B_ID%in%bact) # Bacteria with 1-matches interacting with 
+    matching_protospacers <- inner_join(G_j, S_i, by=c('PS'='SP')) %>% distinct(PS)
+    k_j <- nrow(matching_protospacers)
+    R_1_j <- Z*(1/k_j)*sum_N_i
+    R_1_hr <- rbind(R_1_hr, tibble(hr=hr, V_ID=j, R_1_j=R_1_j, k_j=k_j))
   }
   
-  # Weigh R_1m by relative virus abundance
-  virus_abund <- x$virus_abund_hr %>% filter(V_ID%in%R_pot_hr$V_ID)
+  # Weigh R_1 by relative virus abundance
+  virus_abund <- x$virus_abund_hr %>% filter(V_ID%in%R_1_hr$V_ID)
   virus_abund$rel_density <- virus_abund$density/sum(virus_abund$density)
-  suppressMessages(R_pot_hr %<>%
+  suppressMessages(R_1_hr %<>%
                      left_join(virus_abund) %>%
-                     mutate(R_pot_j_w=R_pot_j*rel_density))
+                     mutate(R_1_j_w=R_1_j*rel_density))
   
-  R_pot_df <- rbind(R_pot_df, R_pot_hr)
+  R_1_df <- rbind(R_1_df, R_1_hr)
 
-  notify(paste('Calculated R_pot for time',hr))
+  notify(paste('Calculated R_1 for time',hr))
 }
 
-record_data(R_pot_df)
+record_data(R_1_df)
 
-# plot population measures of R_pot
-plt_R_pot <- 
+# plot population measures of R_1
+plt_R_1 <- 
   standard_plot(
-    R_pot_df %>% group_by(hr) %>%
-      summarise(R_pot_mean=mean(R_pot_j), # Mean across viruses
-                R_1m_mean_w=sum(R_pot_j_w),# Weighted mean across viruses: need to SUM the R_0m_w across viruses because this gives the weighted average for the population
-                R_1m_max=max(R_pot_j)) %>% 
+    R_1_df %>% group_by(hr) %>%
+      summarise(R_1_mean=mean(R_1_j), # Mean across viruses
+                R_1m_mean_w=sum(R_1_j_w),# Weighted mean across viruses: need to SUM the R_0m_w across viruses because this gives the weighted average for the population
+                R_1m_max=max(R_1_j)) %>% 
       gather(key='variable', value='value', -hr) %>% 
       ggplot(aes(hr, value))+
       geom_line(color='#F066D8')+
@@ -1163,28 +1157,28 @@ plt_R_pot <-
       labs(title = 'Virus population measures for R with 1 matches')
   )
 
-make_png(plt_R_pot)
-make_svg(plt_R_pot)
+make_png(plt_R_1)
+make_svg(plt_R_1)
 
 
-# Calculate the R_potential
+# Calculate the R_escape
 R_escape_df <-
   # Need to join 0-matches with 1-matches to sum them
-  full_join(R_0m_df,R_pot_df,by=c('hr','V_ID')) %>% 
+  full_join(R_0m_df,R_1_df,by=c('hr','V_ID')) %>% 
   # Convert NAs resulting from the join to 0s
   mutate(R_0m=ifelse(is.na(R_0m),0,R_0m),
-         R_pot_j=ifelse(is.na(R_pot_j),0,R_pot_j),
+         R_1_j=ifelse(is.na(R_1_j),0,R_1_j),
          R_0m_w_j=ifelse(is.na(R_0m_w_j),0,R_0m_w_j),
-         R_pot_j_w=ifelse(is.na(R_pot_j_w),0,R_pot_j_w)) %>% 
+         R_1_j_w=ifelse(is.na(R_1_j_w),0,R_1_j_w)) %>% 
   # Remove variables that are now replicated
   mutate(density=ifelse(is.na(density.x), density.y, density.x)) %>% 
   mutate(rel_density=ifelse(is.na(rel_density.x), rel_density.y, rel_density.x)) %>% 
   # Select and organize the columns
   select(-density.x, -density.y, -rel_density.x, -rel_density.y) %>% 
   select(hr,V_ID,density,rel_density,everything()) %>% 
-  # Caclulate R_pot and weighted R_pot
-  mutate(Rescape=R_0m+R_pot_j,
-         Rescape_w_j=R_0m_w_j+R_pot_j_w)
+  # Caclulate R_1 and weighted R_1
+  mutate(Rescape=R_0m+R_1_j,
+         Rescape_w_j=R_0m_w_j+R_1_j_w)
 
 record_data(R_escape_df)
 
@@ -1201,15 +1195,15 @@ standard_plot(
     geom_hline(yintercept = 1, linetype='dashed', color='gray50')+
     labs(title = 'Virus population measures for R_escape')
 )
-make_png(plt_R_pot)
-make_svg(plt_R_pot)
+make_png(plt_R_escape)
+make_svg(plt_R_escape)
 
 
-# Plot areas where an escape mutation can lead to Rpot>1
+# Plot areas where an escape mutation can lead to R_escape>1
 R_escape_summary <- 
   R_escape_df %>% group_by(hr) %>% 
   summarise(R_0m_mean_w=sum(R_0m_w_j),
-            R_pot_mean_w=sum(R_pot_j_w),
+            R_1_mean_w=sum(R_1_j_w),
             R_escape_mean_w=sum(Rescape_w_j)) %>% 
   mutate(escape_point=ifelse(R_0m_mean_w<1 & R_escape_mean_w>1,T,F))
   
@@ -1218,15 +1212,21 @@ standard_plot(
   ggplot()+
     geom_hline(yintercept = 1, linetype='dashed', color='gray50')+
     geom_line(data=R_escape_summary, aes(hr,R_0m_mean_w),color='#8ACAFE')+
-    geom_line(data=R_escape_summary, aes(hr,R_pot_mean_w),color='#F066D8')+
+    geom_line(data=R_escape_summary, aes(hr,R_1_mean_w),color='#F066D8')+
     geom_point(data=R_escape_summary %>% filter(escape_point==T), aes(hr,R_escape_mean_w),color='red')+
     scale_y_continuous(limits = c(0,5))+
     labs(y='Value of R0 (weighted means)', title='Times when R_escape>1 in HCRs')
 )
-make_png(plt_R_pot_effect)
-make_svg(plt_R_pot_effect)
+make_png(plt_R_escape_effect)
+make_svg(plt_R_escape_effect)
 
-
+pdf('R_escape.pdf',8,8)
+ggplot(R_1_df, aes(k_j))+geom_histogram()+labs(title = 'k_j values across all hours')+theme_bw()
+ggplot(R_1_df, aes(R_1_j))+geom_histogram()+labs(title = 'Distribution of R_1 (non-weighted) across all hours')+theme_bw()
+ggplot(R_1_df, aes(R_1_j_w))+geom_histogram()+labs(title = 'Distribution of R_1 (weighted) across all hours')+theme_bw()
+plt_R_1
+plt_R_escape_effect
+dev.off()
 
 # Plot -----------------------------------------------------------
 
@@ -1245,8 +1245,8 @@ pdf(paste(base_name,'_main_figures.pdf',sep=''), 16, 10, onefile = T)
   grid.arrange(plt_extinction_rank+labs(title = 'Distribution of extinction ranks'))
   grid.arrange(plt_R0m)
   grid.arrange(plt_R1m)
-  grid.arrange(plt_R_pot)
-  grid.arrange(plt_R_pot_effect)
+  grid.arrange(plt_R_1)
+  grid.arrange(plt_R_1_effect)
   grid.arrange(plt_virus_persistence+labs(title = 'Diversification and persistence of viruses'))
   grid.arrange(plt_bacteria_persistence+labs(title = 'Diversification and persistence of bacteria'))
   grid.arrange(plt_viruses_tree+labs(title = 'Viruses phylogenetic tree'))
