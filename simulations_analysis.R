@@ -1161,8 +1161,8 @@ make_png(plt_R_1)
 make_svg(plt_R_1)
 
 
-# Calculate the R_escape
-R_escape_df <-
+# Calculate the R_pot
+R_pot_df <-
   # Need to join 0-matches with 1-matches to sum them
   full_join(R_0m_df,R_1_df,by=c('hr','V_ID')) %>% 
   # Convert NAs resulting from the join to 0s
@@ -1177,59 +1177,70 @@ R_escape_df <-
   select(-density.x, -density.y, -rel_density.x, -rel_density.y) %>% 
   select(hr,V_ID,density,rel_density,everything()) %>% 
   # Caclulate R_1 and weighted R_1
-  mutate(Rescape=R_0m+R_1_j,
-         Rescape_w_j=R_0m_w_j+R_1_j_w)
+  mutate(R_pot=R_0m+R_1_j,
+         R_pot_w_j=R_0m_w_j+R_1_j_w)
 
-record_data(R_escape_df)
+record_data(R_pot_df)
 
-plt_R_escape <- 
+plt_R_pot <- 
 standard_plot(
-  R_escape_df %>% group_by(hr) %>%
-    summarise(R_escape_mean=mean(Rescape),
-              R_escape_mean_w=sum(Rescape_w_j),# Need to SUM the R_0m_w across viruses because this gives the weighted average for the population
-              R_escape_max=max(Rescape)) %>% 
+  R_pot_df %>% group_by(hr) %>%
+    summarise(R_pot_mean=mean(R_pot),
+              R_pot_mean_w=sum(R_pot_w_j),# Need to SUM the R_0m_w across viruses because this gives the weighted average for the population
+              R_pot_max=max(R_pot)) %>% 
     gather(key='variable', value='value', -hr) %>% 
     ggplot(aes(hr, value))+
     geom_line()+
     facet_grid(variable~., scales = 'free_y')+
     geom_hline(yintercept = 1, linetype='dashed', color='gray50')+
-    labs(title = 'Virus population measures for R_escape')
+    labs(title = 'Virus population measures for R_pot')
 )
-make_png(plt_R_escape)
-make_svg(plt_R_escape)
+make_png(plt_R_pot)
+make_svg(plt_R_pot)
 
 
-# Plot areas where an escape mutation can lead to R_escape>1
-R_escape_summary <- 
-  R_escape_df %>% group_by(hr) %>% 
+# Plot areas where an escape mutation can lead to R_pot>1
+R_pot_summary <- 
+  R_pot_df %>% group_by(hr) %>% 
   summarise(R_0m_mean_w=sum(R_0m_w_j),
             R_1_mean_w=sum(R_1_j_w),
-            R_escape_mean_w=sum(Rescape_w_j)) %>% 
-  mutate(escape_point=ifelse(R_0m_mean_w<1 & R_escape_mean_w>1,T,F))
+            R_pot_mean_w=sum(R_pot_w_j)) %>% 
+  mutate(escape_point=ifelse(R_0m_mean_w<1 & R_pot_mean_w>1,T,F))
   
-plt_R_escape_effect <- 
+plt_R_pot_effect <- 
 standard_plot(
   ggplot()+
     geom_hline(yintercept = 1, linetype='dashed', color='gray50')+
-    geom_line(data=R_escape_summary, aes(hr,R_0m_mean_w),color='#8ACAFE')+
-    geom_line(data=R_escape_summary, aes(hr,R_1_mean_w),color='#F066D8')+
-    geom_point(data=R_escape_summary %>% filter(escape_point==T), aes(hr,R_escape_mean_w),color='red')+
+    geom_line(data=R_pot_summary, aes(hr,R_0m_mean_w),color='#8ACAFE', size=1.2)+
+    geom_line(data=R_pot_summary, aes(hr,R_1_mean_w),color='#F066D8', size=1.2)+
+    # geom_point(data=R_pot_summary %>% filter(escape_point==T), aes(hr,R_pot_mean_w),color='red')+
     scale_y_continuous(limits = c(0,5))+
-    labs(y='Value of R0 (weighted means)', title='Times when R_escape>1 in HCRs')
+    labs(y='Average values of R0 and R1 (weighted by virus abundance)')
 )
-make_png(plt_R_escape_effect)
-make_svg(plt_R_escape_effect)
+make_png(plt_R_pot_effect)
+make_svg(plt_R_pot_effect)
 
-pdf('R_escape.pdf',8,8)
-ggplot(R_1_df, aes(k_j))+geom_histogram()+labs(title = 'k_j values across all hours')+theme_bw()
-ggplot(R_1_df, aes(R_1_j))+geom_histogram()+labs(title = 'Distribution of R_1 (non-weighted) across all hours')+theme_bw()
-ggplot(R_1_df, aes(R_1_j_w))+geom_histogram()+labs(title = 'Distribution of R_1 (weighted) across all hours')+theme_bw()
-plt_R_1
-plt_R_escape_effect
-dev.off()
+# pdf('R_pot.pdf',8,8)
+# ggplot(R_1_df, aes(k_j))+geom_histogram()+labs(title = 'k_j values across all hours')+theme_bw()
+# ggplot(R_1_df, aes(R_1_j))+geom_histogram()+labs(title = 'Distribution of R_1 (non-weighted) across all hours')+theme_bw()
+# ggplot(R_1_df, aes(R_1_j_w))+geom_histogram()+labs(title = 'Distribution of R_1 (weighted) across all hours')+theme_bw()
+# plt_R_1
+# plt_R_pot_effect
+# dev.off()
 
 # Plot -----------------------------------------------------------
-
+# Fig 4
+# mytheme <- theme(panel.grid = element_blank(),
+#                  axis.text = element_text(size = 14, color='black'),
+#                  axis.title = element_text(size = 14, color='black')
+# )
+# svg('/Users/shai/Dropbox (BGU)/Apps/Overleaf/CRISPR-Networks-NEE/figures/time_series_v4.svg',12,9)
+# pdf('/Users/shai/Dropbox (BGU)/Apps/Overleaf/CRISPR-Networks-NEE/Final_submission/figures_main_text/Fig_4_v2.pdf',12,9)
+# plot_grid(plt_WNODF+mytheme+theme(axis.title.x = element_blank()),
+#           plt_spacer_matches+mytheme+theme(axis.title.x = element_blank()),
+#           plt_R_pot_effect+mytheme+labs(y='Average R0 and R1'), 
+#           ncol=1, align='v', labels = letters[1:3], label_size = 20)
+# dev.off()
 
 notify('--> Generate final plots...')
 
