@@ -1176,7 +1176,7 @@ R_pot_df <-
   # Select and organize the columns
   select(-density.x, -density.y, -rel_density.x, -rel_density.y) %>% 
   select(hr,V_ID,density,rel_density,everything()) %>% 
-  # Caclulate R_1 and weighted R_1
+  # Caclulate R_pot and weighted R_pot
   mutate(R_pot=R_0m+R_1_j,
          R_pot_w_j=R_0m_w_j+R_1_j_w)
 
