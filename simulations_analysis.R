@@ -1343,6 +1343,16 @@ make_svg(plt_R_pot_effect)
 # dev.off()
 
 # Plot -----------------------------------------------------------
+
+
+pdf('/Users/shai/Dropbox (BGU)/Apps/Overleaf/CRISPR-Networks-NEE/Final_submission/figures_SI/Pilosof_ED_4.pdf',12,8)
+plt_modules_infection+
+  scale_y_continuous(limits=c(0,17), breaks = seq(0,20,5))+
+  theme(panel.grid = element_blank(),
+        axis.title = element_text(color='black', size=18),
+        axis.text = element_text(color='black', size=18))
+dev.off()
+
 # Fig 4
 # mytheme <- theme(panel.grid = element_blank(),
 #                  axis.text = element_text(size = 14, color='black'),
