@@ -29,6 +29,7 @@ library(ggtree)
 library(ape)
 library(treeio)
 library(igraph)
+library(xtable)
 library(tidyverse)
 library(magrittr)
 library(bipartite)
@@ -100,13 +101,153 @@ list_to_matrix <- function(l, directed=F, bipartite=T){
 }
 
 
+# create_networks_hr <- function(virus_data,bacteria_data,hr){
+#   virus_data_hr <- virus_data %>% filter(timesOfRecord==hr)
+#   bacteria_data_hr <- bacteria_data %>% filter(timesOfRecord==hr)
+#   virus_abund_hr <- virus_data_hr %>% select(label, density) %>% rename(V_ID=label) %>% mutate(V_ID=paste('V_',str_pad(V_ID, 4, 'left', '0'),sep=''))
+#   bacteria_abund_hr <- bacteria_data_hr %>% select(label, density) %>% rename(B_ID=label) %>% mutate(B_ID=paste('B_',str_pad(B_ID, 4, 'left', '0'),sep=''))
+#   
+#   # Create networks in a list form
+#   
+#   ## Virus-protospacer network
+#   virus_ps_hr_list <- virus_data_hr %>% select(-time, -timesOfRecord, -density) %>% 
+#     gather(key='PSidx', value='value', -label) %>% 
+#     rename(V_ID=label, PS=value) %>% 
+#     arrange(V_ID,PS) %>% 
+#     mutate(w=1) %>% 
+#     mutate(V_ID=paste('V_',str_pad(V_ID, 4, 'left', '0'),sep='')) %>% 
+#     mutate(PS=paste('P_',str_pad(PS, 4, 'left', '0'),sep='')) %>% 
+#     select(V_ID,PS,w,PSidx)
+#   
+#   ## Bacteria-spacer network
+#   bacteria_sp_hr_list <- bacteria_data_hr %>% 
+#     select(-time, -timesOfRecord, -density) %>% 
+#     gather(key='SPidx', value='value', -label) %>% 
+#     filter(value!=-1) %>%
+#     rename(B_ID=label, SP=value) %>% 
+#     arrange(B_ID,SP) %>% 
+#     mutate(w=1) %>%
+#     # mutate(w=ifelse(SP==-1,0,1)) %>% 
+#     mutate(B_ID=paste('B_',str_pad(B_ID, 4, 'left', '0'),sep='')) %>% 
+#     mutate(SP=paste('P_',str_pad(SP, 4, 'left', '0'),sep='')) %>% 
+#     select(B_ID,SP,w,SPidx)
+#  
+#   # Bacteria without spacers: This is needed for NEUTRAL SCENARIOS in which
+#   # interactions are not related to spacer-protospacer acquisition. So bacteria
+#   # can actually survive without acquiting protospacers.
+#   bacteria_no_sp <- bacteria_data_hr %>% 
+#     select(-time, -timesOfRecord, -density) %>% 
+#     gather(key='SPidx', value='value', -label) %>% 
+#     filter(value==-1) %>% 
+#     group_by(label) %>% 
+#     summarise(no_spacers=n()) %>% filter(no_spacers==spacer_len) %>%
+#     rename(B_ID=label) %>% 
+#     mutate(B_ID=paste('B_',str_pad(B_ID, 4, 'left', '0'),sep=''))
+#   
+#   # Add to the bacteria-spacer network those bacteria without spacers.
+#   suppressWarnings(
+#     bacteria_sp_hr_list <- bind_rows(bacteria_sp_hr_list, 
+#                                      as.tibble(expand.grid(B_ID=bacteria_no_sp$B_ID, SP=unique(bacteria_sp_hr_list$SP), w=0)))
+#   )
+#   ## Immunity network as a list
+#   x <- virus_ps_hr_list %>% select(V_ID, PS)
+#   y <- bacteria_sp_hr_list %>% 
+#     filter(w!=0) %>% # MUST include only the interactions using filter(w!=0), otherwise the immunity network will have false edges that should not exist.
+#     select(B_ID, SP) 
+#   immunity_list <- x %>% inner_join(y, by = c('PS'='SP')) %>% 
+#     arrange(B_ID, V_ID) %>% 
+#     group_by(V_ID, B_ID) %>% count() %>%
+#     rename(w=n)
+#   
+#   # Define nodes in the system
+#   viruses_hr <- sort(unique(virus_abund_hr$V_ID))
+#   bacteria_hr <- sort(unique(bacteria_abund_hr$B_ID))
+#   spacers_hr <- sort(union(bacteria_sp_hr_list$SP, virus_ps_hr_list$PS))
+#   nodes <- tibble(nodeID=1:(length(viruses_hr)+length(bacteria_hr)+length(spacers_hr)),
+#                   nodeName=c(viruses_hr, bacteria_hr, spacers_hr),
+#                   type=c(rep(1,length(viruses_hr)), rep(2,length(bacteria_hr)), rep(3,length(spacers_hr)))
+#   )
+#   nodes$type <- as.integer(nodes$type)
+#   
+#   # Check networks
+#   if (nrow(bacteria_sp_hr_list)==0) {bacteria_sp_hr_list <- NULL}
+#   if (nrow(immunity_list)==0) {immunity_list <- NULL}
+#   
+#   ## Infection network
+#   # To get this we first need to create the immunity nertwork as a matrix
+#   if (!is.null(immunity_list)){
+#     immunity_matrix <- list_to_matrix(immunity_list) # transform to a matrix format
+#   } else {
+#     immunity_matrix <- matrix(0, nrow=length(bacteria_hr), ncol=length(viruses_hr), dimnames = list(bacteria_hr, viruses_hr))
+#   }
+# 
+#   # Add all the nodes which were not included in the list because they have degree of zero
+#   # missing_bacteria <- setdiff(unique(bacteria_sp_hr_list$B_ID),rownames(immunity_matrix)) 
+#   # immunity_matrix <- rbind(immunity_matrix, matrix(0, 
+#   #                                                    ncol = ncol(immunity_matrix),
+#   #                                                    nrow = length(missing_bacteria),
+#   #                                                    dimnames = list(missing_bacteria, colnames(immunity_matrix))))
+#   # 
+#   
+#   infection_matrix <- 1*(immunity_matrix==0) # Binary infection network is the "negative (photography-wise)" of the immunity network
+#   if (any(infection_matrix==1)){ # If there is at least one non-zero interaction in the infection network
+#     N_T <- sum(bacteria_abund_hr$density)
+#     # This will produce a matrix with values: (N_i*V_j)/N_T
+#     A <- crossprod(matrix(bacteria_abund_hr$density, nrow=1,
+#                           ncol=length(bacteria_abund_hr$density),
+#                           dimnames=list(NULL, bacteria_abund_hr$B_ID)),
+#                    matrix(virus_abund_hr$density, 
+#                           nrow=1,ncol=length(virus_abund_hr$density)                        ,
+#                           dimnames=list(NULL, virus_abund_hr$V_ID)))
+#     A <- A/N_T
+#     # This will remove all cells that are 0.
+#     A <- A[rownames(infection_matrix),colnames(infection_matrix)]
+#     infection_matrix <- infection_matrix*A 
+#     # Transform the infection network to a list
+#     g <- graph.incidence(t(infection_matrix), directed = F, weighted = T) # Need to transpose so the "from" would be viruses and the "to" would be bacteria
+#     infection_list <- as.tibble(igraph::as_data_frame(g, what = 'edges'))
+#     names(infection_list) <- c('V_ID', 'B_ID', 'w')
+#   } else { # All interactions are 0
+#     infection_list <- NULL
+#   }
+#   
+#   # Calculate the effective mutation matrix. These lines here save a double for loop
+#   # and selecting bacteria and virus abundances at each step.
+#   # First produce a matrix with N_i*V_j values:
+#   A <- crossprod(matrix(bacteria_abund_hr$density, nrow=1,  
+#                         ncol=length(bacteria_abund_hr$density),
+#                         dimnames=list(NULL, bacteria_abund_hr$B_ID)),
+#                  matrix(virus_abund_hr$density, 
+#                         nrow=1,ncol=length(virus_abund_hr$density)                        ,
+#                         dimnames=list(NULL, virus_abund_hr$V_ID)))
+#   A <- A[rownames(immunity_matrix),colnames(immunity_matrix)]
+#   M0 <- 1*(immunity_matrix==0)
+#   M0 <- M0*A*beta*mu*phi*(1-q) # This is from Childs et al 2012 Suppl Info, page 4. The multiplication by M0 thakes only the no matches
+#   M1 <- 1*(immunity_matrix!=0)
+#   M1 <- M1*A*beta*mu*phi*p # This is from Childs et al 2012 Suppl Info, page 4. The multiplication by M1 thakes only the  matches
+#   mutation_matrix <- M0+M1
+# 
+#   return(list(hr=hr,
+#               virus_ps_list=virus_ps_hr_list,
+#               bacteria_sp_list=bacteria_sp_hr_list,
+#               immunity_list=immunity_list,
+#               immunity_matrix=immunity_matrix,
+#               infection_list=infection_list,
+#               infection_matrix=infection_matrix,
+#               mutation_matrix=mutation_matrix,
+#               bacteria_no_sp=bacteria_no_sp,
+#               virus_abund_hr=virus_abund_hr,
+#               bacteria_abund_hr=bacteria_abund_hr,
+#               nodes=nodes
+#   ))
+# }
+
+
 create_networks_hr <- function(virus_data,bacteria_data,hr){
   virus_data_hr <- virus_data %>% filter(timesOfRecord==hr)
   bacteria_data_hr <- bacteria_data %>% filter(timesOfRecord==hr)
   virus_abund_hr <- virus_data_hr %>% select(label, density) %>% rename(V_ID=label) %>% mutate(V_ID=paste('V_',str_pad(V_ID, 4, 'left', '0'),sep=''))
   bacteria_abund_hr <- bacteria_data_hr %>% select(label, density) %>% rename(B_ID=label) %>% mutate(B_ID=paste('B_',str_pad(B_ID, 4, 'left', '0'),sep=''))
-  
-  # Create networks in a list form
   
   ## Virus-protospacer network
   virus_ps_hr_list <- virus_data_hr %>% select(-time, -timesOfRecord, -density) %>% 
@@ -130,64 +271,42 @@ create_networks_hr <- function(virus_data,bacteria_data,hr){
     mutate(B_ID=paste('B_',str_pad(B_ID, 4, 'left', '0'),sep='')) %>% 
     mutate(SP=paste('P_',str_pad(SP, 4, 'left', '0'),sep='')) %>% 
     select(B_ID,SP,w,SPidx)
- 
-  # Bacteria without spacers: This is needed for NEUTRAL SCENARIOS in which
-  # interactions are not related to spacer-protospacer acquisition. So bacteria
-  # can actually survive without acquiting protospacers.
-  bacteria_no_sp <- bacteria_data_hr %>% 
-    select(-time, -timesOfRecord, -density) %>% 
-    gather(key='SPidx', value='value', -label) %>% 
-    filter(value==-1) %>% 
-    group_by(label) %>% 
-    summarise(no_spacers=n()) %>% filter(no_spacers==spacer_len) %>%
-    rename(B_ID=label) %>% 
-    mutate(B_ID=paste('B_',str_pad(B_ID, 4, 'left', '0'),sep=''))
   
-  # Add to the bacteria-spacer network those bacteria without spacers.
-  suppressWarnings(
-    bacteria_sp_hr_list <- bind_rows(bacteria_sp_hr_list, 
-                                     as.tibble(expand.grid(B_ID=bacteria_no_sp$B_ID, SP=unique(bacteria_sp_hr_list$SP), w=0)))
-  )
-  ## Immunity network as a list
-  x <- virus_ps_hr_list %>% select(V_ID, PS)
-  y <- bacteria_sp_hr_list %>% 
-    filter(w!=0) %>% # MUST include only the interactions usign filter(w!=0), otherwise the immunity network will have false edges that should not exist.
-    select(B_ID, SP) 
-  immunity_list <- x %>% inner_join(y, by = c('PS'='SP')) %>% 
-    arrange(B_ID, V_ID) %>% 
-    group_by(V_ID, B_ID) %>% count() %>%
-    rename(w=n)
-  
-  # Define nodes in the system
-  viruses_hr <- sort(unique(virus_abund_hr$V_ID))
-  bacteria_hr <- sort(unique(bacteria_abund_hr$B_ID))
-  spacers_hr <- sort(union(bacteria_sp_hr_list$SP, virus_ps_hr_list$PS))
-  nodes <- tibble(nodeID=1:(length(viruses_hr)+length(bacteria_hr)+length(spacers_hr)),
-                  nodeName=c(viruses_hr, bacteria_hr, spacers_hr),
-                  type=c(rep(1,length(viruses_hr)), rep(2,length(bacteria_hr)), rep(3,length(spacers_hr)))
-  )
-  nodes$type <- as.integer(nodes$type)
-  
-  # Check networks
-  if (nrow(bacteria_sp_hr_list)==0) {bacteria_sp_hr_list <- NULL}
-  if (nrow(immunity_list)==0) {immunity_list <- NULL}
-  
-  ## Infection network
-  # To get this we first need to create the immunity nertwork as a matrix
-  if (!is.null(immunity_list)){
-    immunity_matrix <- list_to_matrix(immunity_list) # transform to a matrix format
+  # When all bacteria have no spacers. This is mostly in the first moments of the simulation
+  if (nrow(bacteria_sp_hr_list)==0) {
+    bacteria_sp_hr_list <- NULL
+    # If all bacteria have no spacers, all of them are susceptible top all viruses
+    viruses <- sort(unique(virus_ps_hr_list$V_ID))
+    bacteria <- bacteria_data_hr %>% mutate(B_ID=paste('B_',str_pad(label, 4, 'left', '0'),sep='')) %>% 
+      select(B_ID)
+    bacteria <- sort(unique(bacteria$B_ID))
+    immunity_matrix <- matrix(0, nrow = length(bacteria), ncol = length(viruses), dimnames = list(bacteria, viruses))
+    immunity_list <- NULL
   } else {
-    immunity_matrix <- matrix(0, nrow=length(bacteria_hr), ncol=length(viruses_hr), dimnames = list(bacteria_hr, viruses_hr))
+    # Immunity matrix 
+    x <- virus_ps_hr_list %>% select(V_ID, PS)
+    y <- bacteria_sp_hr_list %>% 
+      filter(w!=0) %>% # MUST include only the interactions using filter(w!=0), otherwise the immunity network will have false edges that should not exist.
+      select(B_ID, SP) 
+    x$w=1; x=list_to_matrix(x)
+    y$w=1; y=list_to_matrix(y)
+    # Create a virus-protospacer network with all the protospacers in the system
+    all_ps <- sort(union(rownames(y), rownames(x)))
+    ps_virus <- matrix(0, nrow=length(all_ps), ncol=ncol(x), dimnames = list(all_ps, colnames(x)))
+    ps_virus[rownames(x), colnames(x)] <- x
+    # Create a bacteria-spacer network with all the spacers in the system
+    ps_bact <- matrix(0, nrow=length(all_ps), ncol=ncol(y), dimnames = list(all_ps, colnames(y)))
+    ps_bact[rownames(y), colnames(y)] <- y
+    # Calculate the immunity matrix
+    immunity_matrix <- crossprod(ps_bact, ps_virus)
+    
+    # Immunity list
+    g <- graph.incidence(t(immunity_matrix), weighted = T) # transposing ensures that "from" is at the columns and "to" is the rows
+    immunity_list <- as_tibble(igraph::as_data_frame(g, 'edges')) %>% rename(V_ID=from, B_ID=to, w=weight)
   }
-
-  # Add all the nodes which were not included in the list because they have degree of zero
-  # missing_bacteria <- setdiff(unique(bacteria_sp_hr_list$B_ID),rownames(immunity_matrix)) 
-  # immunity_matrix <- rbind(immunity_matrix, matrix(0, 
-  #                                                    ncol = ncol(immunity_matrix),
-  #                                                    nrow = length(missing_bacteria),
-  #                                                    dimnames = list(missing_bacteria, colnames(immunity_matrix))))
-  # 
   
+  
+  # Infection matrix
   infection_matrix <- 1*(immunity_matrix==0) # Binary infection network is the "negative (photography-wise)" of the immunity network
   if (any(infection_matrix==1)){ # If there is at least one non-zero interaction in the infection network
     N_T <- sum(bacteria_abund_hr$density)
@@ -210,22 +329,17 @@ create_networks_hr <- function(virus_data,bacteria_data,hr){
     infection_list <- NULL
   }
   
-  # Calculate the effective mutation matrix. These lines here save a double for loop
-  # and selecting bacteria and virus abundances at each step.
-  # First produce a matrix with N_i*V_j values:
-  A <- crossprod(matrix(bacteria_abund_hr$density, nrow=1,  
-                        ncol=length(bacteria_abund_hr$density),
-                        dimnames=list(NULL, bacteria_abund_hr$B_ID)),
-                 matrix(virus_abund_hr$density, 
-                        nrow=1,ncol=length(virus_abund_hr$density)                        ,
-                        dimnames=list(NULL, virus_abund_hr$V_ID)))
-  A <- A[rownames(immunity_matrix),colnames(immunity_matrix)]
-  M0 <- 1*(immunity_matrix==0)
-  M0 <- M0*A*beta*mu*phi*(1-q) # This is from Childs et al 2012 Suppl Info, page 4. The multiplication by M0 thakes only the no matches
-  M1 <- 1*(immunity_matrix!=0)
-  M1 <- M1*A*beta*mu*phi*p # This is from Childs et al 2012 Suppl Info, page 4. The multiplication by M1 thakes only the  matches
-  mutation_matrix <- M0+M1
-
+  
+  # Define nodes in the system
+  viruses_hr <- sort(unique(virus_abund_hr$V_ID))
+  bacteria_hr <- sort(unique(bacteria_abund_hr$B_ID))
+  spacers_hr <- sort(union(bacteria_sp_hr_list$SP, virus_ps_hr_list$PS))
+  nodes <- tibble(nodeID=1:(length(viruses_hr)+length(bacteria_hr)+length(spacers_hr)),
+                  nodeName=c(viruses_hr, bacteria_hr, spacers_hr),
+                  type=c(rep(1,length(viruses_hr)), rep(2,length(bacteria_hr)), rep(3,length(spacers_hr)))
+  )
+  nodes$type <- as.integer(nodes$type)
+  
   return(list(hr=hr,
               virus_ps_list=virus_ps_hr_list,
               bacteria_sp_list=bacteria_sp_hr_list,
@@ -233,13 +347,13 @@ create_networks_hr <- function(virus_data,bacteria_data,hr){
               immunity_matrix=immunity_matrix,
               infection_list=infection_list,
               infection_matrix=infection_matrix,
-              mutation_matrix=mutation_matrix,
-              bacteria_no_sp=bacteria_no_sp,
               virus_abund_hr=virus_abund_hr,
               bacteria_abund_hr=bacteria_abund_hr,
               nodes=nodes
   ))
 }
+
+
 
 get_regimes <- function (phage_time_series, d2_threshold=0.001, do_smoothing = T, make_plots=F) {
   if (do_smoothing){print('Finding regimes with smoothing...')} else {print('Finding regimes without smoothing...')}
@@ -847,8 +961,8 @@ for (i in 1:nrow(VDRs)){
 record_data(phylogenetic_signal_infection)
 
 # Create Table S1
-x=phylogenetic_signal_infection %>% select(VDR_ID=VDR, Module=m, Size=mod_size, Pvalue=pvalue, Significant=Signif)
-print(xtable(x, type = "latex"), file = "table_s1.tex", include.rownames = F)
+# x=phylogenetic_signal_infection %>% select(VDR_ID=VDR, Module=m, Size=mod_size, Pvalue=pvalue, Significant=Signif)
+# print(xtable::xtable(x, type = "latex"), file = "table_s1.tex", include.rownames = F)
 
 
 # Significance of modularity of host-spacer networks --------------------------------------
@@ -1031,7 +1145,7 @@ make_svg(plt_extinction_rank)
 #   left_join(ext_immunity_rank) %>%
 #   mutate(high_rank=ifelse(ext_immunity_rank>median(ext_immunity_rank),T,F))
 
-# R0 for 0 and 1 matches --------------------------------------------------
+# R calculations --------------------------------------------------
 
 # R_ij (whether for 0 or 1 matches) is calculated per bacteria-virus pair because
 # it is the growth rate of a virus strain j in a bacteria strain i. To obtain the R0

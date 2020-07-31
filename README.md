@@ -86,7 +86,7 @@ The R file `simulations_analysis.R` is divided into sections.
 * **WNODF**: Calculate the WNDOF index for weighted nestedness in immunity networks at each time.
 * **Spacer matches**: Calculate the proportion of spacer matches (the edge weights in immunity networks) at each time.
 * **Extinctions**: Analyze order of virus extinction.
-* **R<sub>0</sub> for 0 and 1 matches**: This calculates the R<sub>0</sub> and R<sub>1</sub>, which together form the R<sub>pot</sub>.
+* **R calculations**: This calculates the epidemiological R quantities.
 * **Plot**: Produce a PDF with all the plots for convenience.
 
 The following sections are also used in file `host_spacer_simulation.Rmd`. The analysis in these sections serves for comparison to empirical data.
