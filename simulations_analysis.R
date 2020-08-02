@@ -147,7 +147,7 @@ list_to_matrix <- function(l, directed=F, bipartite=T){
 #   # Add to the bacteria-spacer network those bacteria without spacers.
 #   suppressWarnings(
 #     bacteria_sp_hr_list <- bind_rows(bacteria_sp_hr_list, 
-#                                      as.tibble(expand.grid(B_ID=bacteria_no_sp$B_ID, SP=unique(bacteria_sp_hr_list$SP), w=0)))
+#                                      as_tibble(expand.grid(B_ID=bacteria_no_sp$B_ID, SP=unique(bacteria_sp_hr_list$SP), w=0)))
 #   )
 #   ## Immunity network as a list
 #   x <- virus_ps_hr_list %>% select(V_ID, PS)
@@ -205,7 +205,7 @@ list_to_matrix <- function(l, directed=F, bipartite=T){
 #     infection_matrix <- infection_matrix*A 
 #     # Transform the infection network to a list
 #     g <- graph.incidence(t(infection_matrix), directed = F, weighted = T) # Need to transpose so the "from" would be viruses and the "to" would be bacteria
-#     infection_list <- as.tibble(igraph::as_data_frame(g, what = 'edges'))
+#     infection_list <- as_tibble(igraph::as_data_frame(g, what = 'edges'))
 #     names(infection_list) <- c('V_ID', 'B_ID', 'w')
 #   } else { # All interactions are 0
 #     infection_list <- NULL
@@ -323,7 +323,7 @@ create_networks_hr <- function(virus_data,bacteria_data,hr){
     infection_matrix <- infection_matrix*A 
     # Transform the infection network to a list
     g <- graph.incidence(t(infection_matrix), directed = F, weighted = T) # Need to transpose so the "from" would be viruses and the "to" would be bacteria
-    infection_list <- as.tibble(igraph::as_data_frame(g, what = 'edges'))
+    infection_list <- as_tibble(igraph::as_data_frame(g, what = 'edges'))
     names(infection_list) <- c('V_ID', 'B_ID', 'w')
   } else { # All interactions are 0
     infection_list <- NULL
@@ -1296,6 +1296,7 @@ R_pot_df <-
 
 record_data(R_pot_df)
 
+R_pot_df <- read_csv('/Users/shai/GitHub/ecomplab/CRISPR_networks/data/mu1e-7_initialDiffDp1_S10P15_R-12499/mu1e-7_initialDiffDp1_S10P15_R-12499_R_pot_df.csv')
 plt_R_pot <- 
 standard_plot(
   R_pot_df %>% group_by(hr) %>%
@@ -1344,7 +1345,7 @@ make_svg(plt_R_pot_effect)
 
 # Plot -----------------------------------------------------------
 
-
+# Fig. S4
 pdf('/Users/shai/Dropbox (BGU)/Apps/Overleaf/CRISPR-Networks-NEE/Final_submission/figures_SI/Pilosof_ED_4.pdf',12,8)
 plt_modules_infection+
   scale_y_continuous(limits=c(0,17), breaks = seq(0,20,5))+
@@ -1353,18 +1354,178 @@ plt_modules_infection+
         axis.text = element_text(color='black', size=18))
 dev.off()
 
+
+# Plot Fig 3a. ------------------------------------------------------------
+
+plot_nested_matrix <- function(M, binary_cols=c('gray','red'), title='', x_title='', y_title='', legend_title=''){
+  M_orig <- M
+  tmp <- as.matrix(M[order(rowSums(M), decreasing = T), order(colSums(M),decreasing = F)])
+  rnames <- rownames(M)[order(rowSums(M), decreasing = T)]
+  cnames <- colnames(M)[order(colSums(M), decreasing = F)]
+  rownames(tmp) <- rnames
+  colnames(tmp) <- cnames
+  M <- tmp
+    
+  if (method=='heatmap'){
+    heatmap(M, Rowv = NA, Colv = NA, 
+            symm = F, scale = 'none', revC = T, margins=c(7,7), 
+            # labRow = F, labCol = F, 
+            col=colors, main=title)
+    return(invisible())
+  }
+  
+  if (method=='ggplot'){
+    M <- reshape2::melt(M)
+    if (ncol(M)==1){ # If M has only one dimension after ordering M for the nestedness then reshaping does not work well.
+      M$Var1 <- rownames(M)
+      M$Var2 <- dimnames(M_orig)[[which(dim(M_orig)==1)]]
+    }
+    plt=as_tibble(M) %>% 
+      ggplot()+
+      geom_tile(aes(Var1,Var2,fill=value))+
+      scale_fill_gradientn(colours=colors, name=legend_title)+
+      theme(
+        axis.text.x=element_text(angle=-90),
+        axis.ticks = element_blank(),
+        axis.title = element_text(size = 18))+
+      labs(title=title, x=x_title,y=y_title)+
+      coord_fixed()
+    return(list(M=M,plt=plt))
+  }
+}
+
+# Fig. 3b ----------------------------------------------
+plot_modular_matrix <- function(x, fix_coordinates=T, axes_titles=c('Set 1', 'Set 2'), transpose=F, outside_module_col='gray'){
+  if(class(x)!='infomap_monolayer'){stop('x must be of class infomap_monolayer')}
+  
+  # Add module affiliations to the edge list, module 1 is the affiliation of the node from Set1; module2 is the affiliation of the node from Set2
+  M_set1 <- M_set2 <- x$edge_list[1:3]
+  names(M_set1) <- names(M_set2) <- names(x$edge_list)[1:3] <- c('Set1','Set2','w')
+  suppressMessages(suppressWarnings(M_set1 %<>% left_join(x$modules, by=c('Set1'='node_name')) %>% rename(module1=module_level1)))
+  suppressMessages(suppressWarnings(M_set2 %<>% left_join(x$modules, by=c('Set2'='node_name')) %>% rename(module2=module_level1)))
+  # Join into a single tibble
+  suppressMessages(suppressWarnings(
+    M <- full_join(M_set1, M_set2, by = c("Set1", "Set2", "w")) %>% 
+      select(Set1, Set2, w, module1, module2)
+  ))
+  # Order by modules
+  Set1_modules <- unique(M_set1[,c('Set1','module1')])
+  Set1_modules <- with(Set1_modules, Set1_modules[order(module1,Set1),])
+  Set2_modules <- unique(M_set2[,c('Set2','module2')])
+  Set2_modules <- with(Set2_modules, Set2_modules[order(module2,Set2),])
+  
+  M %<>% 
+    mutate(edge_in_out=ifelse(module1==module2,'in','out')) %>% # Determine if an interaction falls inside or outside a module
+    mutate(value_mod=ifelse(edge_in_out=='in',module1,0)) %>% # Assign a module value of 0 if interaction falls outside the modules
+    mutate(Set1=factor(Set1, levels=Set1_modules$Set1), Set2=factor(Set2, levels=Set2_modules$Set2))
+  # Define module colors
+  module_colors <- tibble(module1=unique(M$module1), col=metafolio::gg_color_hue(n=length(unique(M$module1))))
+  # Join the module colors to the edge list
+  # If there are no interactions outside the module then do not need the gray
+  # color. Otherwise, it will plot the first module in gray.
+  
+  suppressMessages(M %<>% left_join(module_colors) %>%
+                     mutate(col=ifelse(edge_in_out=='in',col,outside_module_col)))
+  
+  # Generate a plot of a modular matrix
+  if (transpose){
+    p <- ggplot()+
+      geom_tile(data=M %>% filter(w!=0), aes(Set2, Set1, fill=col), color='black')+ # Interactions within modules
+      scale_fill_identity()
+  } else {
+    p <- ggplot()+
+      geom_tile(data=M %>% filter(w!=0), aes(Set1, Set2, fill=col), color='black')+ # Interactions within modules
+      scale_fill_identity()
+  }
+  return(p)
+}
+
+plots_modular_networks <- NULL
+i=0
+for (hr in c(123, 150, 190, 231, 400,800,1600)){
+  i=i+1
+  edges <- all_networks[[which(hr_seq==hr)]]$infection_list
+  if(is.null(edges)){next}
+  nodes <- all_networks[[which(hr_seq==hr)]]$nodes
+  x <- create_monolayer_object(edges, bipartite = T)
+  modules <- run_infomap_monolayer(x, infomap_executable = 'Infomap', flow_model = 'undirected', silent = T, 
+                                   trials = 20, two_level = T, seed = 123, 
+                                   signif = F)
+  x <- modules$modules %>% select(node_id, node_name, m=module_level1) %>% mutate(hr=hr)
+  svg(paste('infection_modules_',str_pad(hr,4,'left','0'),'.svg',sep=''),9,6)
+  
+  plots_modular_networks[[i]] <-
+  plot_modular_matrix(modules)+
+    labs(title=hr, x=length(unique(edges$V_ID)), y=length(unique(edges$B_ID)))+
+    coord_fixed()+
+    theme(legend.position='none',
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks=element_blank(),
+          panel.background = element_blank(),
+          axis.title = element_text(size = 14, color='black'),
+          axis.line = element_line(colour = "black")
+      )
+  dev.off()
+}
+
+cowplot::plot_grid(plotlist = plots_modular_networks, nrow=1, ncol=7, axis = 'b', align = 'h')
+
+
+
 # Fig 4
-# mytheme <- theme(panel.grid = element_blank(),
-#                  axis.text = element_text(size = 14, color='black'),
-#                  axis.title = element_text(size = 14, color='black')
-# )
-# svg('/Users/shai/Dropbox (BGU)/Apps/Overleaf/CRISPR-Networks-NEE/figures/time_series_v4.svg',12,9)
-# pdf('/Users/shai/Dropbox (BGU)/Apps/Overleaf/CRISPR-Networks-NEE/Final_submission/figures_main_text/Fig_4_v2.pdf',12,9)
-# plot_grid(plt_WNODF+mytheme+theme(axis.title.x = element_blank()),
-#           plt_spacer_matches+mytheme+theme(axis.title.x = element_blank()),
-#           plt_R_pot_effect+mytheme+labs(y='Average R0 and R1'), 
-#           ncol=1, align='v', labels = letters[1:3], label_size = 20)
-# dev.off()
+mytheme <- theme(panel.grid = element_blank(),
+                 axis.text = element_text(size = 14, color='black'),
+                 axis.title = element_text(size = 14, color='black')
+)
+
+Rmut_data <- read_csv('/Users/shai/GitHub/ecomplab/CRISPR_networks/data/mu1e-7_initialDiffDp1_S10P15_R-12499/RmutDATA.csv')
+plt_R_mut <-
+  standard_plot(
+      ggplot(Rmut_data, aes(x=t, R_mut))+
+        geom_line(size=1.2, color='blue')+
+        geom_hline(yintercept = 1, linetype='dashed')+
+        labs(y=expression(R[mut]))+
+        scale_y_continuous(limits = c(0,4))
+  )+mytheme
+
+
+
+svg('/Users/shai/Dropbox (BGU)/Apps/Overleaf/CRISPR-Networks-NEE/figures/time_series_v4.svg',12,9)
+pdf('/Users/shai/Dropbox (BGU)/Apps/Overleaf/CRISPR-Networks-NEE/Final_submission/figures_main_text/Fig_4.pdf',12,9)
+plot_grid(
+  # panel a: WNODF
+  plt_WNODF+
+    mytheme+theme(axis.title.x = element_blank()),
+  # panel b: spacer matches
+  spacer_matches %>% 
+    left_join(match_cols, by=c('num_matches'='value')) %>% 
+    mutate(col=ifelse(num_matches>6,'black',col)) %>% # more than 6 matches are colored black
+    ggplot(aes(x=hr, prop, color=col))+geom_line(size=1.5)+
+    scale_color_identity('# matches',drop=FALSE, guide = 'legend', labels=match_cols$value, breaks=match_cols$col)+
+    labs(y='% matches')+
+    scale_x_continuous(breaks=label_seq)+
+    geom_vline(xintercept=BDRs$start, col='#27AE60',size=1.2)+
+    geom_vline(xintercept=VDRs$start, col='purple',size=1.2)+
+    theme_bw()+
+    theme(
+      panel.grid = element_blank(),
+      legend.position = c(0.9,0.9),
+      legend.direction='horizontal',
+      legend.justification = c("right", "top"),
+      legend.text = element_text(size = 14, color='black'),
+      legend.title = element_blank(),
+      axis.text = element_text(size = 14, color='black'),
+      axis.title.y = element_text(size = 14, color='black'),
+      axis.title.x = element_blank()
+    ),
+  # panel c: R_mut
+  plt_R_mut,
+  # Options
+  ncol=1, align='v', labels = letters[1:3], label_size = 20)
+dev.off()
+
 
 notify('--> Generate final plots...')
 
