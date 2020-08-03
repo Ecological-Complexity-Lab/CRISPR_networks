@@ -1356,34 +1356,30 @@ dev.off()
 
 
 # Plot Fig 3a. ------------------------------------------------------------
+hr=231
+x <- all_networks[[which(hr_seq==hr)]]$immunity_matrix
+M=x
 
 plot_nested_matrix <- function(M, binary_cols=c('gray','red'), title='', x_title='', y_title='', legend_title=''){
   M_orig <- M
-  tmp <- as.matrix(M[order(rowSums(M), decreasing = T), order(colSums(M),decreasing = F)])
-  rnames <- rownames(M)[order(rowSums(M), decreasing = T)]
-  cnames <- colnames(M)[order(colSums(M), decreasing = F)]
+  tmp <- as.matrix(M[order(rowSums(M), decreasing = F), order(colSums(M),decreasing = T)])
+  rnames <- rownames(M)[order(rowSums(M), decreasing = F)]
+  cnames <- colnames(M)[order(colSums(M), decreasing = T)]
   rownames(tmp) <- rnames
   colnames(tmp) <- cnames
   M <- tmp
-    
-  if (method=='heatmap'){
-    heatmap(M, Rowv = NA, Colv = NA, 
-            symm = F, scale = 'none', revC = T, margins=c(7,7), 
-            # labRow = F, labCol = F, 
-            col=colors, main=title)
-    return(invisible())
-  }
   
-  if (method=='ggplot'){
-    M <- reshape2::melt(M)
-    if (ncol(M)==1){ # If M has only one dimension after ordering M for the nestedness then reshaping does not work well.
-      M$Var1 <- rownames(M)
-      M$Var2 <- dimnames(M_orig)[[which(dim(M_orig)==1)]]
-    }
-    plt=as_tibble(M) %>% 
+  M <- reshape2::melt(M)
+  if (ncol(M)==1){ # If M has only one dimension after ordering M for the nestedness then reshaping does not work well.
+    M$Var1 <- rownames(M)
+    M$Var2 <- dimnames(M_orig)[[which(dim(M_orig)==1)]]
+  }
+
+  as_tibble(M) %>% 
+    mutate(value=as.factor(value)) %>% 
       ggplot()+
-      geom_tile(aes(Var1,Var2,fill=value))+
-      scale_fill_gradientn(colours=colors, name=legend_title)+
+      geom_tile(aes(Var2,Var1,fill=value))+
+      scale_fill_manual(values = c('gray','yellow','orange','red'))
       theme(
         axis.text.x=element_text(angle=-90),
         axis.ticks = element_blank(),
