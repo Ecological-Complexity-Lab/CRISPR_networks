@@ -1356,12 +1356,7 @@ dev.off()
 
 
 # Plot Fig 3a. ------------------------------------------------------------
-hr=231
-x <- all_networks[[which(hr_seq==hr)]]$immunity_matrix
-M=x
-
-plot_nested_matrix <- function(M, binary_cols=c('gray','red'), title='', x_title='', y_title='', legend_title=''){
-  M_orig <- M
+plot_nested_matrix <- function(M){
   tmp <- as.matrix(M[order(rowSums(M), decreasing = F), order(colSums(M),decreasing = T)])
   rnames <- rownames(M)[order(rowSums(M), decreasing = F)]
   cnames <- colnames(M)[order(colSums(M), decreasing = T)]
@@ -1375,23 +1370,43 @@ plot_nested_matrix <- function(M, binary_cols=c('gray','red'), title='', x_title
     M$Var2 <- dimnames(M_orig)[[which(dim(M_orig)==1)]]
   }
 
+  plt <- 
   as_tibble(M) %>% 
     mutate(value=as.factor(value)) %>% 
       ggplot()+
       geom_tile(aes(Var2,Var1,fill=value))+
-      scale_fill_manual(values = c('gray','yellow','orange','red'))
-      theme(
-        axis.text.x=element_text(angle=-90),
-        axis.ticks = element_blank(),
-        axis.title = element_text(size = 18))+
-      labs(title=title, x=x_title,y=y_title)+
+      scale_fill_manual(values = c('gray','#f9ed69','#f08a5d','#b83b5e','#6a2c70','#61210F','#3C3438'))+
       coord_fixed()
-    return(list(M=M,plt=plt))
-  }
+  return(plt)
 }
 
+plots_nested_networks <- NULL
+i=0
+for (hr in c(123, 150, 190, 231, 400,800,1600)){
+  i=i+1
+  x <- all_networks[[which(hr_seq==hr)]]$immunity_matrix
+  nodes <- all_networks[[which(hr_seq==hr)]]$nodes
+  
+  plots_nested_networks[[i]] <-
+    plot_nested_matrix(x)+
+    labs(title=hr, x=ncol(x), y=nrow(x))+
+    coord_fixed()+
+    theme(legend.position='none',
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks=element_blank(),
+          panel.background = element_blank(),
+          axis.title = element_text(size = 14, color='black'),
+          axis.line = element_line(colour = "black")
+    )
+}
+svg('Fig3_nestedness.svg',12,8)
+cowplot::plot_grid(plotlist = plots_nested_networks, nrow=1, ncol=7, axis = 'b', align = 'vh')
+dev.off()
+
 # Fig. 3b ----------------------------------------------
-plot_modular_matrix <- function(x, fix_coordinates=T, axes_titles=c('Set 1', 'Set 2'), transpose=F, outside_module_col='gray'){
+plot_modular_matrix <- function(x, fix_coordinates=T, axes_titles=c('Set 1', 'Set 2'), transpose=F, outside_module_col='black'){
   if(class(x)!='infomap_monolayer'){stop('x must be of class infomap_monolayer')}
   
   # Add module affiliations to the edge list, module 1 is the affiliation of the node from Set1; module2 is the affiliation of the node from Set2
@@ -1448,11 +1463,11 @@ for (hr in c(123, 150, 190, 231, 400,800,1600)){
                                    trials = 20, two_level = T, seed = 123, 
                                    signif = F)
   x <- modules$modules %>% select(node_id, node_name, m=module_level1) %>% mutate(hr=hr)
-  svg(paste('infection_modules_',str_pad(hr,4,'left','0'),'.svg',sep=''),9,6)
+  # svg(paste('infection_modules_',str_pad(hr,4,'left','0'),'.svg',sep=''),9,6)
   
   plots_modular_networks[[i]] <-
   plot_modular_matrix(modules)+
-    labs(title=hr, x=length(unique(edges$V_ID)), y=length(unique(edges$B_ID)))+
+    labs(x=length(unique(edges$V_ID)), y=length(unique(edges$B_ID)))+
     coord_fixed()+
     theme(legend.position='none',
           panel.grid.major = element_blank(),
@@ -1463,11 +1478,12 @@ for (hr in c(123, 150, 190, 231, 400,800,1600)){
           axis.title = element_text(size = 14, color='black'),
           axis.line = element_line(colour = "black")
       )
-  dev.off()
+  # dev.off()
 }
 
+svg('Fig3_modularity.svg',12,8)
 cowplot::plot_grid(plotlist = plots_modular_networks, nrow=1, ncol=7, axis = 'b', align = 'h')
-
+dev.off()
 
 
 # Fig 4
